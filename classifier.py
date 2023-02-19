@@ -12,10 +12,10 @@ from sklearn.metrics import classification_report, f1_score, recall_score, accur
 # change it with respect to the original model
 from tokenizer import BertTokenizer
 from bert import BertModel
-# from optimizer import AdamW
+from optimizer import AdamW
 from tqdm import tqdm
 
-from torch.optim import AdamW
+# from torch.optim import AdamW
 
 
 TQDM_DISABLE=False
