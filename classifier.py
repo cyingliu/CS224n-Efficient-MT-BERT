@@ -1,8 +1,10 @@
 import time, random, numpy as np, argparse, sys, re, os
 from types import SimpleNamespace
 import csv
+import yaml
 
 import torch
+import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import Dataset, DataLoader
 from sklearn.metrics import classification_report, f1_score, recall_score, accuracy_score
@@ -10,8 +12,10 @@ from sklearn.metrics import classification_report, f1_score, recall_score, accur
 # change it with respect to the original model
 from tokenizer import BertTokenizer
 from bert import BertModel
-from optimizer import AdamW
+# from optimizer import AdamW
 from tqdm import tqdm
+
+from torch.optim import AdamW
 
 
 TQDM_DISABLE=False
@@ -44,8 +48,9 @@ class BertSentimentClassifier(torch.nn.Module):
             elif config.option == 'finetune':
                 param.requires_grad = True
 
-        ### TODO
-        raise NotImplementedError
+        # hugging face BertForSequenceClassification: classifier_dropout if config.classifier_dropout is not None else config.hidden_dropout_prob
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.classifier = nn.Linear(config.hidden_size, config.num_labels)
 
 
     def forward(self, input_ids, attention_mask):
@@ -53,8 +58,12 @@ class BertSentimentClassifier(torch.nn.Module):
         # The final BERT contextualized embedding is the hidden state of [CLS] token (the first token).
         # HINT: you should consider what is the appropriate output to return given that
         # the training loop currently uses F.cross_entropy as the loss function.
-        ### TODO
-        raise NotImplementedError
+        outputs = self.bert(input_ids, attention_mask)
+        sequence_output, pooled_output = outputs['last_hidden_state'], outputs['pooler_output']
+        pooled_output = self.dropout(pooled_output)
+        logits = self.classifier(pooled_output)
+        
+        return logits
 
 
 
@@ -342,13 +351,21 @@ def get_args():
     parser.add_argument("--lr", type=float, help="learning rate, default lr for 'pretrain': 1e-3, 'finetune': 1e-5",
                         default=1e-5)
 
+    parser.add_argument("--output_dir", type=str, help="dir for saved model (.pt) and prediction files (.csv)",
+                        default="result/tmp")
+
     args = parser.parse_args()
     return args
 
 if __name__ == "__main__":
     args = get_args()
     seed_everything(args.seed)
-    #args.filepath = f'{args.option}-{args.epochs}-{args.lr}.pt'
+    
+    if not os.path.exists(args.output_dir):
+        os.makedirs(args.output_dir)
+    with open(os.path.join(args.output_dir, "config.yaml"), 'w') as outfile:
+        yaml.dump(vars(args), outfile)
+    args.filepath = os.path.join(args.output_dir, "checkpoint.pt")
 
     print('Training Sentiment Classifier on SST...')
     config = SimpleNamespace(
@@ -362,8 +379,8 @@ if __name__ == "__main__":
         dev='data/ids-sst-dev.csv',
         test='data/ids-sst-test-student.csv',
         option=args.option,
-        dev_out = 'ids-sst-dev-out.csv',
-        test_out = 'ids-sst-test-out.csv'
+        dev_out = os.path.join(args.output_dir, 'ids-sst-dev-out.csv'),
+        test_out = os.path.join(args.output_dir, 'ids-sst-test-out.csv')
     )
 
     train(config)
@@ -383,8 +400,8 @@ if __name__ == "__main__":
         dev='data/ids-cfimdb-dev.csv',
         test='data/ids-cfimdb-test-student.csv',
         option=args.option,
-        dev_out = 'ids-cfimdb-dev-out.csv',
-        test_out = 'ids-cfimdb-test-out.csv'
+        dev_out = os.path.join(args.output_dir, 'ids-cfimdb-dev-out.csv'),
+        test_out = os.path.join(args.output_dir, 'ids-cfimdb-test-out.csv')
     )
 
     train(config)
