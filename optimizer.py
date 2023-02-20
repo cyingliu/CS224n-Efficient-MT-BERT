@@ -32,6 +32,10 @@ class AdamW(Optimizer):
             loss = closure()
 
         for group in self.param_groups:
+            exp_avgs = []
+            exp_avg_squares = []
+            state_steps = []
+
             for p in group["params"]:
                 if p.grad is None:
                     continue
@@ -43,7 +47,12 @@ class AdamW(Optimizer):
                 state = self.state[p]
 
                 # Access hyperparameters from the `group` dictionary
-                alpha = group["lr"]
+                alpha = group["lr"]             # learning rate
+                beta1, beta2 = group['betas']   # beta1 and beta 2
+                param = p.data                  # the parameter tensor θ_(t−1)
+                weight_decay = group['weight_decay']
+
+                state_steps = []
 
                 # Complete the implementation of AdamW here, reading and saving
                 # your state in the `state` dictionary above.
@@ -59,7 +68,42 @@ class AdamW(Optimizer):
                 #    (incorporating the learning rate again).
 
                 ### TODO
-                raise NotImplementedError
+                if len(state) == 0:
+                    """Initialize stuff"""
+                    # state is the optimizer state of the parameter (tensor)
+                    state['step'] = 0
+                    # Exponential moving average of gradients, m_t
+                    state['exp_avg'] = torch.zeros_like(param, memory_format=torch.preserve_format)
+                    # Exponential moving average of squared gradient values, v_t
+                    state['exp_avg_squares'] = torch.zeros_like(param, memory_format=torch.preserve_format)
+                
+                exp_avgs.append(state['exp_avg'])
+                exp_avg_squares.append(state['exp_avg_squares'])
+
+                state_steps.append(state['step'])
+
+                """Run one step of the adam optimizer"""
+                # Increase timestep
+                state['step'] += 1
+
+                # 1- Update first and second moments of the gradients (Get m_t and v_t)
+                m_prev, v_prev = state['exp_avg'], state['exp_avg_squares']
+                m_t = m_prev.mul_(beta1).add_(grad, alpha=1 - beta1)
+                v_t = v_prev.mul_(beta2).addcmul_(grad, grad, value=1 - beta2)
+
+                # 2- Apply bias correction, compute bias-corrected first moment estimate (get mhat_t and vhat_t)
+                bias_correction1 = 1 - beta1 ** state['step']
+                bias_correction2 = 1 - beta2 ** state['step']
+                second_term = alpha * math.sqrt(bias_correction2) / bias_correction1  # alpha * sqrt(bias1)/bias2
+                third_term = v_t.sqrt().add_(group['eps'])                            # m_t / (sqrt(v_t) + eps^hat)
+
+                # 3- Update parameters (p.data).
+                param.data.addcdiv_(m_t, third_term, value=-second_term)              # param - (second_term * third_term) 
+
+                # 4- After that main gradient-based update, update again using weight decay
+                # (incorporating the learning rate again).
+                if weight_decay != 0:
+                    param.add_(-weight_decay * alpha, param)
 
 
         return loss
