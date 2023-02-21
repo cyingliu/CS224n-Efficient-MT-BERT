@@ -290,6 +290,7 @@ def train(args):
             train_loss += loss.item()
             num_batches += 1
 
+
         train_loss = train_loss / (num_batches)
 
         train_acc, train_f1, *_  = model_eval(train_dataloader, model, device)
@@ -365,11 +366,10 @@ if __name__ == "__main__":
         os.makedirs(args.output_dir)
     with open(os.path.join(args.output_dir, "config.yaml"), 'w') as outfile:
         yaml.dump(vars(args), outfile)
-    args.filepath = os.path.join(args.output_dir, "checkpoint.pt")
 
     print('Training Sentiment Classifier on SST...')
     config = SimpleNamespace(
-        filepath='sst-classifier.pt',
+        filepath=os.path.join(args.output_dir, 'sst-classifier.pt'),
         lr=args.lr,
         use_gpu=args.use_gpu,
         epochs=args.epochs,
@@ -390,7 +390,7 @@ if __name__ == "__main__":
 
     print('Training Sentiment Classifier on cfimdb...')
     config = SimpleNamespace(
-        filepath='cfimdb-classifier.pt',
+        filepath=os.path.join(args.output_dir, 'cfimdb-classifier.pt'),
         lr=args.lr,
         use_gpu=args.use_gpu,
         epochs=args.epochs,
