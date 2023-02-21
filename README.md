@@ -24,3 +24,10 @@ The BERT implementation part of the project was adapted from the "minbert" assig
 created by Shuyan Zhou, Zhengbao Jiang, Ritam Dutt, Brendon Boldt, Aditya Veerubhotla, and Graham Neubig.
 
 Parts of the code are from the [`transformers`](https://github.com/huggingface/transformers) library ([Apache License 2.0](./LICENSE)).
+
+## Other
+Paper link: https://docs.google.com/spreadsheets/d/1LWrbaXWh6i8SJbvJ5o-TWr5RkVuHSKxputMlH6aMZVQ/edit?usp=sharing. 
+
+Experiment table link: https://docs.google.com/spreadsheets/d/1Gsw49kSUKG4NlRpbCfMYUcfCjo6qEvHWP7uNDIKc1V4/edit?usp=sharing
+
+Hackmd link: https://hackmd.io/@grcgs2212/By2_e6R2o
