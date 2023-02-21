@@ -26,5 +26,5 @@ created by Shuyan Zhou, Zhengbao Jiang, Ritam Dutt, Brendon Boldt, Aditya Veerub
 Parts of the code are from the [`transformers`](https://github.com/huggingface/transformers) library ([Apache License 2.0](./LICENSE)).
 
 ### Other
-Paper link: https://docs.google.com/spreadsheets/d/1LWrbaXWh6i8SJbvJ5o-TWr5RkVuHSKxputMlH6aMZVQ/edit?usp=sharing
+Paper link: https://docs.google.com/spreadsheets/d/1LWrbaXWh6i8SJbvJ5o-TWr5RkVuHSKxputMlH6aMZVQ/edit?usp=sharing. 
 Hackmd link: https://hackmd.io/@grcgs2212/By2_e6R2o
