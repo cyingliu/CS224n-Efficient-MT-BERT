@@ -25,7 +25,7 @@ created by Shuyan Zhou, Zhengbao Jiang, Ritam Dutt, Brendon Boldt, Aditya Veerub
 
 Parts of the code are from the [`transformers`](https://github.com/huggingface/transformers) library ([Apache License 2.0](./LICENSE)).
 
-### Other
+## Other
 Paper link: https://docs.google.com/spreadsheets/d/1LWrbaXWh6i8SJbvJ5o-TWr5RkVuHSKxputMlH6aMZVQ/edit?usp=sharing. 
 
 Experiment table link: https://docs.google.com/spreadsheets/d/1Gsw49kSUKG4NlRpbCfMYUcfCjo6qEvHWP7uNDIKc1V4/edit?usp=sharing
