@@ -15,7 +15,9 @@ from bert import BertModel
 from optimizer import AdamW
 from tqdm import tqdm
 
+### debug
 # from torch.optim import AdamW
+# from transformers import BertModel
 
 
 TQDM_DISABLE=False
@@ -238,6 +240,7 @@ def save_model(model, optimizer, args, config, filepath):
 
 def train(args):
     device = torch.device('cuda') if args.use_gpu else torch.device('cpu')
+    print("Device:", device)
     # Load data
     # Create the data and its corresponding datasets and dataloader
     train_data, num_labels = load_data(args.train, 'train')

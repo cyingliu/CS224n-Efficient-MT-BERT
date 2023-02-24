@@ -1,0 +1,11 @@
+tqdm==4.58.0
+requests==2.25.1
+importlib-metadata==3.7.0
+filelock==3.0.12
+sklearn==0.0
+tokenizers==0.10.1
+explainaboard_client==0.0.7
+zipp==3.11.0
+idna
+chardet==4.0.0
+transformers
