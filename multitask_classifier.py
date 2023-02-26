@@ -14,14 +14,14 @@ from tqdm import tqdm
 from datasets import SentenceClassificationDataset, SentencePairDataset, \
     load_multitask_data, load_multitask_test_data
 
-from evaluation import model_eval_sst, test_model_multitask
+from evaluation import model_eval_sst, test_model_multitask, model_eval_multitask
 
 from itertools import cycle
 import yaml
 from tokenizer import BertTokenizer
 
 
-TQDM_DISABLE=True
+TQDM_DISABLE=False
 
 # fix the random seed
 def seed_everything(seed=11711):
@@ -57,8 +57,10 @@ class MultitaskBERT(nn.Module):
             elif config.option == 'finetune':
                 param.requires_grad = True
         ### TODO
-        self.sentiment_dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.sentiment_classifier = nn.Linear(config.hidden_size, config.num_labels)
+        self.para_classifier = nn.Linear(config.hidden_size * 2, 1)
+        self.sim_classifier = nn.Linear(config.hidden_size * 2, 1)
 
 
     def forward(self, input_ids, attention_mask):
@@ -81,7 +83,7 @@ class MultitaskBERT(nn.Module):
         '''
         ### TODO
         sequence_output, pooled_output = self.forward(input_ids, attention_mask)
-        pooled_output = self.sentiment_dropout(pooled_output)
+        pooled_output = self.dropout(pooled_output)
         logits = self.sentiment_classifier(pooled_output)
 
         return logits
@@ -95,8 +97,14 @@ class MultitaskBERT(nn.Module):
         during evaluation, and handled as a logit by the appropriate loss function.
         '''
         ### TODO
-        # raise NotImplementedError
-        return torch.ones(input_ids_1.shape[0]).to(input_ids_1.device)
+        sequence_output_1, pooled_output_1 = self.forward(input_ids_1, attention_mask_1)
+        sequence_output_2, pooled_output_2 = self.forward(input_ids_2, attention_mask_2)
+        pooled_output_1 = self.dropout(pooled_output_1)
+        pooled_output_2 = self.dropout(pooled_output_2)
+        pooled_output_cat = torch.cat((pooled_output_1, pooled_output_2), dim=-1)
+        logits = self.para_classifier(pooled_output_cat)
+        
+        return logits
 
 
     def predict_similarity(self,
@@ -107,8 +115,14 @@ class MultitaskBERT(nn.Module):
         during evaluation, and handled as a logit by the appropriate loss function.
         '''
         ### TODO
-        # raise NotImplementedError
-        return torch.ones(input_ids_1.shape[0]).to(input_ids_1.device)
+        sequence_output_1, pooled_output_1 = self.forward(input_ids_1, attention_mask_1)
+        sequence_output_2, pooled_output_2 = self.forward(input_ids_2, attention_mask_2)
+        pooled_output_1 = self.dropout(pooled_output_1)
+        pooled_output_2 = self.dropout(pooled_output_2)
+        pooled_output_cat = torch.cat((pooled_output_1, pooled_output_2), dim=-1)
+        logits = self.sim_classifier(pooled_output_cat)
+
+        return logits
 
 
 
@@ -158,7 +172,7 @@ def train_multitask(args):
     sts_dev_data = SentencePairDataset(sts_dev_data, args)
 
     sts_train_dataloader = DataLoader(sts_train_data, shuffle=True, batch_size=args.batch_size,
-                                        collate_fn=sst_train_data.collate_fn)
+                                        collate_fn=sts_train_data.collate_fn)
     sts_dev_dataloader = DataLoader(sts_dev_data, shuffle=True, batch_size=args.batch_size,
                                         collate_fn=sts_dev_data.collate_fn)
     
@@ -203,7 +217,7 @@ def train_multitask(args):
         model.train()
         train_loss = [0. for i in range(3)]
         num_batches = [0 for i in range(3)]
-        for _ in range(steps_per_epoch):
+        for _ in tqdm(range(steps_per_epoch), desc=f'train-{epoch}', disable=TQDM_DISABLE):
             if args.sample == 'rr':
                 task_id = (task_id + 1) % 3
             else:
@@ -224,17 +238,9 @@ def train_multitask(args):
                 b_ids1, b_mask1, b_ids2, b_mask2, b_labels \
                     = b_ids1.to(device), b_mask1.to(device),\
                       b_ids2.to(device), b_mask2.to(device), b_labels.to(device)
-                # tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-                # print("b_ids1", b_ids1)
-                # print("b_ids2", b_ids2)
-                # sent_1 = tokenizer.batch_decode(b_ids1)
-                # sent_2 = tokenizer.batch_decode(b_ids2)
-                # print("sent_1", sent_1)
-                # print("sent_2", sent_2)
-                # exit()
 
                 logits = model.predict_paraphrase(b_ids1, b_mask1, b_ids2, b_mask2)
-                loss = F.binary_cross_entropy_with_logits(logits, b_labels.float().view(-1), reduction='sum') / args.batch_size
+                loss = F.binary_cross_entropy_with_logits(logits.squeeze(-1), b_labels.float(), reduction='sum') / args.batch_size
             elif task_id == 2: # sts
                 b_ids1, b_mask1, b_ids2, b_mask2, b_labels \
                     = (batch['token_ids_1'], batch['attention_mask_1'],\
@@ -243,7 +249,7 @@ def train_multitask(args):
                     = b_ids1.to(device), b_mask1.to(device),\
                       b_ids2.to(device), b_mask2.to(device), b_labels.to(device)
                 logits = model.predict_similarity(b_ids1, b_mask1, b_ids2, b_mask2)
-                loss = F.binary_cross_entropy_with_logits(logits, b_labels.float().view(-1), reduction='sum') / args.batch_size
+                loss = F.binary_cross_entropy_with_logits(logits.squeeze(-1), b_labels.float(), reduction='sum') / args.batch_size
             else:
                 raise ValueError(f"Invalid task_id: {task_id}")
           
