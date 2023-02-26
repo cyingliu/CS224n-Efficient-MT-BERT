@@ -31,3 +31,5 @@ Paper link: https://docs.google.com/spreadsheets/d/1LWrbaXWh6i8SJbvJ5o-TWr5RkVuH
 Experiment table link: https://docs.google.com/spreadsheets/d/1Gsw49kSUKG4NlRpbCfMYUcfCjo6qEvHWP7uNDIKc1V4/edit?usp=sharing
 
 Hackmd link: https://hackmd.io/@grcgs2212/By2_e6R2o
+
+PAL (multi-task, houlsby) reference code: https://github.com/AsaCooperStickland/Bert-n-Pals
