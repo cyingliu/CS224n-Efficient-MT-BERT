@@ -18,6 +18,7 @@ from evaluation import model_eval_sst, test_model_multitask
 
 from itertools import cycle
 import yaml
+from tokenizer import BertTokenizer
 
 
 TQDM_DISABLE=True
@@ -56,7 +57,8 @@ class MultitaskBERT(nn.Module):
             elif config.option == 'finetune':
                 param.requires_grad = True
         ### TODO
-        raise NotImplementedError
+        self.sentiment_dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.sentiment_classifier = nn.Linear(config.hidden_size, config.num_labels)
 
 
     def forward(self, input_ids, attention_mask):
@@ -66,7 +68,9 @@ class MultitaskBERT(nn.Module):
         # When thinking of improvements, you can later try modifying this
         # (e.g., by adding other layers).
         ### TODO
-        raise NotImplementedError
+        outputs = self.bert(input_ids, attention_mask)
+        sequence_output, pooled_output = outputs['last_hidden_state'], outputs['pooler_output']
+        return sequence_output, pooled_output
 
 
     def predict_sentiment(self, input_ids, attention_mask):
@@ -76,7 +80,11 @@ class MultitaskBERT(nn.Module):
         Thus, your output should contain 5 logits for each sentence.
         '''
         ### TODO
-        raise NotImplementedError
+        sequence_output, pooled_output = self.forward(input_ids, attention_mask)
+        pooled_output = self.sentiment_dropout(pooled_output)
+        logits = self.sentiment_classifier(pooled_output)
+
+        return logits
 
 
     def predict_paraphrase(self,
@@ -87,7 +95,8 @@ class MultitaskBERT(nn.Module):
         during evaluation, and handled as a logit by the appropriate loss function.
         '''
         ### TODO
-        raise NotImplementedError
+        # raise NotImplementedError
+        return torch.ones(input_ids_1.shape[0]).to(input_ids_1.device)
 
 
     def predict_similarity(self,
@@ -98,7 +107,8 @@ class MultitaskBERT(nn.Module):
         during evaluation, and handled as a logit by the appropriate loss function.
         '''
         ### TODO
-        raise NotImplementedError
+        # raise NotImplementedError
+        return torch.ones(input_ids_1.shape[0]).to(input_ids_1.device)
 
 
 
@@ -121,10 +131,11 @@ def save_model(model, optimizer, args, config, filepath):
 ## Currently only trains on sst dataset
 def train_multitask(args):
     device = torch.device('cuda') if args.use_gpu else torch.device('cpu')
+    print("Devcie:", device)
     
     # Load data
     # Create the data and its corresponding datasets and dataloader
-    sst_train_data, num_labels,para_train_data, sts_train_data = load_multitask_data(args.sst_train,args.para_train,args.sts_train, split ='train')
+    sst_train_data, num_labels, para_train_data, sts_train_data = load_multitask_data(args.sst_train,args.para_train,args.sts_train, split ='train')
     sst_dev_data, num_labels,para_dev_data, sts_dev_data = load_multitask_data(args.sst_dev,args.para_dev,args.sts_dev, split ='train')
 
     sst_train_data = SentenceClassificationDataset(sst_train_data, args)
@@ -158,7 +169,7 @@ def train_multitask(args):
 
     # Init model
     config = {'hidden_dropout_prob': args.hidden_dropout_prob,
-              'num_labels': num_labels,
+              'num_labels': len(num_labels),
               'hidden_size': 768,
               'data_dir': '.',
               'option': args.option}
@@ -177,9 +188,9 @@ def train_multitask(args):
 
     train_log_dir = os.path.join(args.output_dir, "log", "train")
     val_log_dir = os.path.join(args.output_dir, "log", "val")
-    if not os.exists(train_log_dir):
+    if not os.path.exists(train_log_dir):
         os.makedirs(train_log_dir)
-    if not os.exists(val_log_dir):
+    if not os.path.exists(val_log_dir):
         os.makedirs(val_log_dir)
     train_writer = SummaryWriter(log_dir=train_log_dir)
     val_writer = SummaryWriter(log_dir=val_log_dir)
@@ -211,19 +222,28 @@ def train_multitask(args):
                     = (batch['token_ids_1'], batch['attention_mask_1'],\
                        batch['token_ids_2'], batch['attention_mask_2'], batch['labels'])
                 b_ids1, b_mask1, b_ids2, b_mask2, b_labels \
-                    = b_ids.to(device), b_mask1.to(device),\
+                    = b_ids1.to(device), b_mask1.to(device),\
                       b_ids2.to(device), b_mask2.to(device), b_labels.to(device)
-                logits = model.predict_paraphrase(b_ids, b_mask1, b_ids2, b_mask2)
-                loss = F.binary_cross_entropy_with_logits(logits, b_labels.view(-1), reduction='sum') / args.batch_size
+                # tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+                # print("b_ids1", b_ids1)
+                # print("b_ids2", b_ids2)
+                # sent_1 = tokenizer.batch_decode(b_ids1)
+                # sent_2 = tokenizer.batch_decode(b_ids2)
+                # print("sent_1", sent_1)
+                # print("sent_2", sent_2)
+                # exit()
+
+                logits = model.predict_paraphrase(b_ids1, b_mask1, b_ids2, b_mask2)
+                loss = F.binary_cross_entropy_with_logits(logits, b_labels.float().view(-1), reduction='sum') / args.batch_size
             elif task_id == 2: # sts
                 b_ids1, b_mask1, b_ids2, b_mask2, b_labels \
                     = (batch['token_ids_1'], batch['attention_mask_1'],\
                        batch['token_ids_2'], batch['attention_mask_2'], batch['labels'])
                 b_ids1, b_mask1, b_ids2, b_mask2, b_labels \
-                    = b_ids.to(device), b_mask1.to(device),\
+                    = b_ids1.to(device), b_mask1.to(device),\
                       b_ids2.to(device), b_mask2.to(device), b_labels.to(device)
-                logits = model.predict_similarity(b_ids, b_mask1, b_ids2, b_mask2)
-                loss = F.binary_cross_entropy_with_logits(logits, b_labels.view(-1), reduction='sum') / args.batch_size
+                logits = model.predict_similarity(b_ids1, b_mask1, b_ids2, b_mask2)
+                loss = F.binary_cross_entropy_with_logits(logits, b_labels.float().view(-1), reduction='sum') / args.batch_size
             else:
                 raise ValueError(f"Invalid task_id: {task_id}")
           
@@ -326,7 +346,7 @@ def get_args():
     parser.add_argument("--output_dir", "--output_dir", type=str, help="dir for saved model (.pt) and prediction files (.csv)",
                         default="result/tmp")
     # multi-task
-    parser.add_argument("--sample", help='sample method for multi dataset (rr)', type=str, default='rr')
+    parser.add_argument("--sample", help='sample method for multi dataset', type=str, choices=('rr'), default='rr')
 
     args = parser.parse_args()
     return args
