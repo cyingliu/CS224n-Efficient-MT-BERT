@@ -168,8 +168,8 @@ def train_multitask(args):
     para_dev_dataloader = DataLoader(para_dev_data, shuffle=True, batch_size=args.batch_size,
                                         collate_fn=para_dev_data.collate_fn)
 
-    sts_train_data = SentencePairDataset(sts_train_data, args)
-    sts_dev_data = SentencePairDataset(sts_dev_data, args)
+    sts_train_data = SentencePairDataset(sts_train_data, args, isRegression=True)
+    sts_dev_data = SentencePairDataset(sts_dev_data, args, isRegression=True)
 
     sts_train_dataloader = DataLoader(sts_train_data, shuffle=True, batch_size=args.batch_size,
                                         collate_fn=sts_train_data.collate_fn)
@@ -212,11 +212,14 @@ def train_multitask(args):
     # Run for the specified number of epochs
     steps_per_epoch = len(sst_train_dataloader) + len(para_train_dataloader) + len(sts_train_dataloader)
     task_id = 0
-    step = 0
+    step = 1
+    train_loss = [0. for i in range(3)]
+    num_batches = [0 for i in range(3)]
+    tr_sst_loss, tr_para_loss, tr_sts_loss = None, None, None
+    
     for epoch in range(args.epochs):
         model.train()
-        train_loss = [0. for i in range(3)]
-        num_batches = [0 for i in range(3)]
+        
         for _ in tqdm(range(steps_per_epoch), desc=f'train-{epoch}', disable=TQDM_DISABLE):
             if args.sample == 'rr':
                 task_id = (task_id + 1) % 3
@@ -249,7 +252,7 @@ def train_multitask(args):
                     = b_ids1.to(device), b_mask1.to(device),\
                       b_ids2.to(device), b_mask2.to(device), b_labels.to(device)
                 logits = model.predict_similarity(b_ids1, b_mask1, b_ids2, b_mask2)
-                loss = F.binary_cross_entropy_with_logits(logits.squeeze(-1), b_labels.float(), reduction='sum') / args.batch_size
+                loss = F.mse_loss(logits.squeeze(-1), b_labels.float(), reduction='sum') / args.batch_size
             else:
                 raise ValueError(f"Invalid task_id: {task_id}")
           
@@ -262,14 +265,24 @@ def train_multitask(args):
             train_loss[task_id] += loss.item()
             num_batches[task_id] += 1
 
-        for task_id in range(3):
-            train_loss[task_id] = train_loss[task_id] / num_batches[task_id]
+            if step % args.log_interval == 0:
+                for task_id in range(3):
+                    if num_batches[task_id] == 0:
+                        train_loss[task_id] = float('nan')
+                    else:
+                        train_loss[task_id] = train_loss[task_id] / num_batches[task_id]
+                train_writer.add_scalar("sst_loss", train_loss[0], step)
+                train_writer.add_scalar("para_loss", train_loss[1], step)
+                train_writer.add_scalar("sts_loss", train_loss[2], step)
+                tr_sst_loss, tr_para_loss, tr_sts_loss = train_loss[0], train_loss[1], train_loss[2]
+                train_loss = [0. for i in range(3)]
+                num_batches = [0 for i in range(3)]
+            step += 1
 
         para_train_acc, _, _, sst_train_acc, _, _, sts_train_acc, _, _ = model_eval_multitask(sst_train_dataloader, para_train_dataloader, sts_train_dataloader, model, device)
         para_dev_acc, _, _, sst_dev_acc, _, _, sts_dev_acc, _, _ = model_eval_multitask(sst_dev_dataloader, para_dev_dataloader, sts_dev_dataloader, model, device)
         avg_dev_acc = np.mean([para_dev_acc, sst_dev_acc, sts_dev_acc])
-
-        
+   
         if sst_dev_acc > sst_best_dev_acc:
             sst_best_dev_acc = sst_dev_acc
             save_model(model, optimizer, args, config, os.path.join(args.output_dir, 'best-sst-multi-task-classifier.pt'))
@@ -283,17 +296,15 @@ def train_multitask(args):
             avg_best_dev_acc = avg_dev_acc
             save_model(model, optimizer, args, config, os.path.join(args.output_dir, 'best-avg-multi-task-classifier.pt'))
         
-        train_writer.add_scalar("sst_loss", train_loss[0], epoch)
-        train_writer.add_scalar("para_loss", train_loss[1], epoch)
-        train_writer.add_scalar("sts_loss", train_loss[2], epoch)
-        train_writer.add_scalar("sst_acc", sst_train_acc, epoch)
-        train_writer.add_scalar("para_acc", para_train_acc, epoch)
-        train_writer.add_scalar("sts_acc", sts_train_acc, epoch)
-        val_writer.add_scalar("sst_acc", sst_dev_acc, epoch)
-        val_writer.add_scalar("para_acc", para_dev_acc, epoch)
-        val_writer.add_scalar("sts_acc", sst_dev_acc, epoch)
+        
+        train_writer.add_scalar("sst_acc", sst_train_acc, step)
+        train_writer.add_scalar("para_acc", para_train_acc, step)
+        train_writer.add_scalar("sts_acc", sts_train_acc, step)
+        val_writer.add_scalar("sst_acc", sst_dev_acc, step)
+        val_writer.add_scalar("para_acc", para_dev_acc, step)
+        val_writer.add_scalar("sts_acc", sst_dev_acc, step)
 
-        print(f"Epoch {epoch}: train sst loss :: {train_loss[0] :.3f}, train para loss :: {train_loss[1] :.3f}, train sts loss :: {train_loss[2] : .3f},\n\
+        print(f"Epoch {epoch}: train sst loss :: {tr_sst_loss :.3f}, train para loss :: {tr_para_loss :.3f}, train sts loss :: {tr_sts_loss : .3f},\n\
                 train sst acc :: {sst_train_acc :.3f}, train para acc :: {para_train_acc}, train sts acc :: {sts_train_acc},\n\
                 dev sst acc :: {sst_dev_acc :.3f}, dev para acc :: {para_dev_acc}, dev sts acc :: {sts_dev_acc}")
 
@@ -348,9 +359,10 @@ def get_args():
     parser.add_argument("--hidden_dropout_prob", type=float, default=0.3)
     parser.add_argument("--lr", type=float, help="learning rate, default lr for 'pretrain': 1e-3, 'finetune': 1e-5",
                         default=1e-5)
-    # output
-    parser.add_argument("--output_dir", "--output_dir", type=str, help="dir for saved model (.pt) and prediction files (.csv)",
+    # training setting
+    parser.add_argument("--output_dir", type=str, help="dir for saved model (.pt) and prediction files (.csv)",
                         default="result/tmp")
+    parser.add_argument("--log_interval", type=int, help="interval for log writer", default=100)
     # multi-task
     parser.add_argument("--sample", help='sample method for multi dataset', type=str, choices=('rr'), default='rr')
 
