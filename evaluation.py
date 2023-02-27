@@ -26,7 +26,7 @@ from datasets import load_multitask_data, load_multitask_test_data, \
     SentencePairDataset, SentencePairTestDataset
 
 
-TQDM_DISABLE = True
+TQDM_DISABLE = False
 
 # Evaluate a multitask model for accuracy.on SST only.
 def model_eval_sst(dataloader, model, device):
