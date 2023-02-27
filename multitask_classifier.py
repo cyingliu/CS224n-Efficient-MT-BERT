@@ -372,10 +372,18 @@ def get_args():
 if __name__ == "__main__":
     args = get_args()
     # args.filepath = f'{args.option}-{args.epochs}-{args.lr}-multitask.pt' # save path
+    ### Define output paths ###
     if not os.path.exists(args.output_dir):
         os.makedirs(args.output_dir)
     with open(os.path.join(args.output_dir, "config.yaml"), 'w') as outfile:
         yaml.dump(vars(args), outfile)
+    args.sst_dev_out = os.path.join(args.osutput_dir, "sst-dev-output.csv")
+    args.sst_test_out = os.path.join(args.output_dir, "sst-test-output.csv")
+    args.para_dev_out = os.path.join(args.output_dir, "para-dev-output.csv")
+    args.para_test_out = os.path.join(args.output_dir, "para-test-output.csv")
+    args.sts_dev_out = os.path.join(args.output_dir, "sts-dev-output.csv")
+    args.sts_test_out = os.path.join(args.output_dir, "sts-test-output.csv")
+    ############################
     seed_everything(args.seed)  # fix the seed for reproducibility
     train_multitask(args)
     test_model(args)
