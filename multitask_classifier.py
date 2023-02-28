@@ -297,6 +297,7 @@ def train_multitask(args):
             save_model(model, optimizer, args, config, os.path.join(args.output_dir, 'best-avg-multi-task-classifier.pt'))
         
         
+        # TODO: plus avg score
         train_writer.add_scalar("sst_acc", sst_train_acc, step)
         train_writer.add_scalar("para_acc", para_train_acc, step)
         train_writer.add_scalar("sts_acc", sts_train_acc, step)
@@ -377,7 +378,7 @@ if __name__ == "__main__":
         os.makedirs(args.output_dir)
     with open(os.path.join(args.output_dir, "config.yaml"), 'w') as outfile:
         yaml.dump(vars(args), outfile)
-    args.sst_dev_out = os.path.join(args.osutput_dir, "sst-dev-output.csv")
+    args.sst_dev_out = os.path.join(args.output_dir, "sst-dev-output.csv")
     args.sst_test_out = os.path.join(args.output_dir, "sst-test-output.csv")
     args.para_dev_out = os.path.join(args.output_dir, "para-dev-output.csv")
     args.para_test_out = os.path.join(args.output_dir, "para-test-output.csv")
