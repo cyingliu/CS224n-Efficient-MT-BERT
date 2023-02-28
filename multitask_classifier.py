@@ -303,7 +303,7 @@ def train_multitask(args):
         train_writer.add_scalar("sts_acc", sts_train_acc, step)
         val_writer.add_scalar("sst_acc", sst_dev_acc, step)
         val_writer.add_scalar("para_acc", para_dev_acc, step)
-        val_writer.add_scalar("sts_acc", sst_dev_acc, step)
+        val_writer.add_scalar("sts_acc", sts_dev_acc, step)
 
         print(f"Epoch {epoch}: train sst loss :: {tr_sst_loss :.3f}, train para loss :: {tr_para_loss :.3f}, train sts loss :: {tr_sts_loss : .3f},\n\
                 train sst acc :: {sst_train_acc :.3f}, train para acc :: {para_train_acc}, train sts acc :: {sts_train_acc},\n\
