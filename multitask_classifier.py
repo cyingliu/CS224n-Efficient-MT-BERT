@@ -13,6 +13,7 @@ from tqdm import tqdm
 
 from datasets import SentenceClassificationDataset, SentencePairDataset, \
     load_multitask_data, load_multitask_test_data
+from datasets_custom import SentencePairDataset_custom, SentencePairTestDataset_custom
 
 from evaluation import model_eval_sst, test_model_multitask, model_eval_multitask
 
@@ -57,10 +58,12 @@ class MultitaskBERT(nn.Module):
             elif config.option == 'finetune':
                 param.requires_grad = True
         ### TODO
+        self.concat_pair = config.concat_pair
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.sentiment_classifier = nn.Linear(config.hidden_size, config.num_labels)
-        self.para_classifier = nn.Linear(config.hidden_size * 2, 1)
-        self.sim_classifier = nn.Linear(config.hidden_size * 2, 1)
+        n = 1 if self.concat_pair else 2
+        self.paraphrase_classifier = nn.Linear(config.hidden_size * n, 1)
+        self.similarity_classifier = nn.Linear(config.hidden_size * n, 1)
 
 
     def forward(self, input_ids, attention_mask):
@@ -97,12 +100,18 @@ class MultitaskBERT(nn.Module):
         during evaluation, and handled as a logit by the appropriate loss function.
         '''
         ### TODO
-        sequence_output_1, pooled_output_1 = self.forward(input_ids_1, attention_mask_1)
-        sequence_output_2, pooled_output_2 = self.forward(input_ids_2, attention_mask_2)
-        pooled_output_1 = self.dropout(pooled_output_1)
-        pooled_output_2 = self.dropout(pooled_output_2)
-        pooled_output_cat = torch.cat((pooled_output_1, pooled_output_2), dim=-1)
-        logits = self.para_classifier(pooled_output_cat)
+        if self.concat_pair:
+            sequence_output, pooled_output = self.forward(input_ids_1, attention_mask_1)
+            pooled_output = self.dropout(pooled_output)
+        
+        else:
+            sequence_output_1, pooled_output_1 = self.forward(input_ids_1, attention_mask_1)
+            sequence_output_2, pooled_output_2 = self.forward(input_ids_2, attention_mask_2)
+            pooled_output_1 = self.dropout(pooled_output_1)
+            pooled_output_2 = self.dropout(pooled_output_2)
+            pooled_output = torch.cat((pooled_output_1, pooled_output_2), dim=-1)
+        
+        logits = self.paraphrase_classifier(pooled_output)
         
         return logits
 
@@ -115,16 +124,20 @@ class MultitaskBERT(nn.Module):
         during evaluation, and handled as a logit by the appropriate loss function.
         '''
         ### TODO
-        sequence_output_1, pooled_output_1 = self.forward(input_ids_1, attention_mask_1)
-        sequence_output_2, pooled_output_2 = self.forward(input_ids_2, attention_mask_2)
-        pooled_output_1 = self.dropout(pooled_output_1)
-        pooled_output_2 = self.dropout(pooled_output_2)
-        pooled_output_cat = torch.cat((pooled_output_1, pooled_output_2), dim=-1)
-        logits = self.sim_classifier(pooled_output_cat)
+        if self.concat_pair:
+            sequence_output, pooled_output = self.forward(input_ids_1, attention_mask_1)
+            pooled_output = self.dropout(pooled_output)
+        
+        else:
+            sequence_output_1, pooled_output_1 = self.forward(input_ids_1, attention_mask_1)
+            sequence_output_2, pooled_output_2 = self.forward(input_ids_2, attention_mask_2)
+            pooled_output_1 = self.dropout(pooled_output_1)
+            pooled_output_2 = self.dropout(pooled_output_2)
+            pooled_output = torch.cat((pooled_output_1, pooled_output_2), dim=-1)
+        
+        logits = self.similarity_classifier(pooled_output)
 
         return logits
-
-
 
 
 def save_model(model, optimizer, args, config, filepath):
@@ -146,7 +159,11 @@ def save_model(model, optimizer, args, config, filepath):
 def train_multitask(args):
     device = torch.device('cuda') if args.use_gpu else torch.device('cpu')
     print("Devcie:", device)
-    
+    if args.concat_pair:
+        sentencepair_dataset = SentencePairDataset_custom
+    else:
+        sentencepair_dataset = SentencePairDataset
+
     # Load data
     # Create the data and its corresponding datasets and dataloader
     sst_train_data, num_labels, para_train_data, sts_train_data = load_multitask_data(args.sst_train,args.para_train,args.sts_train, split ='train')
@@ -160,16 +177,16 @@ def train_multitask(args):
     sst_dev_dataloader = DataLoader(sst_dev_data, shuffle=False, batch_size=args.batch_size,
                                     collate_fn=sst_dev_data.collate_fn)
 
-    para_train_data = SentencePairDataset(para_train_data, args)
-    para_dev_data = SentencePairDataset(para_dev_data, args)
+    para_train_data = sentencepair_dataset(para_train_data, args)
+    para_dev_data = sentencepair_dataset(para_dev_data, args)
 
     para_train_dataloader = DataLoader(para_train_data, shuffle=True, batch_size=args.batch_size,
                                         collate_fn=para_train_data.collate_fn)
     para_dev_dataloader = DataLoader(para_dev_data, shuffle=True, batch_size=args.batch_size,
                                         collate_fn=para_dev_data.collate_fn)
 
-    sts_train_data = SentencePairDataset(sts_train_data, args, isRegression=True)
-    sts_dev_data = SentencePairDataset(sts_dev_data, args, isRegression=True)
+    sts_train_data = sentencepair_dataset(sts_train_data, args, isRegression=True)
+    sts_dev_data = sentencepair_dataset(sts_dev_data, args, isRegression=True)
 
     sts_train_dataloader = DataLoader(sts_train_data, shuffle=True, batch_size=args.batch_size,
                                         collate_fn=sts_train_data.collate_fn)
@@ -186,7 +203,8 @@ def train_multitask(args):
               'num_labels': len(num_labels),
               'hidden_size': 768,
               'data_dir': '.',
-              'option': args.option}
+              'option': args.option,
+              'concat_pair': args.concat_pair}
 
     config = SimpleNamespace(**config)
 
@@ -366,7 +384,8 @@ def get_args():
     parser.add_argument("--log_interval", type=int, help="interval for log writer", default=100)
     # multi-task
     parser.add_argument("--sample", help='sample method for multi dataset', type=str, choices=('rr'), default='rr')
-
+    # dataset
+    parser.add_argument("--concat_pair", action='store_true', help="concat two sequences if True, feed separately if False")
     args = parser.parse_args()
     return args
 

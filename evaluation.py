@@ -24,6 +24,7 @@ import numpy as np
 from datasets import load_multitask_data, load_multitask_test_data, \
     SentenceClassificationDataset, SentenceClassificationTestDataset, \
     SentencePairDataset, SentencePairTestDataset
+from datasets_custom import SentencePairDataset_custom, SentencePairTestDataset_custom
 
 
 TQDM_DISABLE = False
@@ -227,6 +228,13 @@ def model_eval_test_multitask(sentiment_dataloader,
 
 
 def test_model_multitask(args, model, device):
+        if args.concat_pair:
+            sentencepair_dataset = SentencePairDataset_custom
+            sentencepair_testdataset = SentencePairTestDataset_custom
+        else:
+            sentencepair_dataset = SentencePairDataset
+            sentencepair_testdataset = SentencePairTestDataset
+        
         sst_test_data, num_labels,para_test_data, sts_test_data = \
             load_multitask_data(args.sst_test,args.para_test, args.sts_test, split='test')
 
@@ -241,16 +249,16 @@ def test_model_multitask(args, model, device):
         sst_dev_dataloader = DataLoader(sst_dev_data, shuffle=False, batch_size=args.batch_size,
                                         collate_fn=sst_dev_data.collate_fn)
 
-        para_test_data = SentencePairTestDataset(para_test_data, args)
-        para_dev_data = SentencePairDataset(para_dev_data, args)
+        para_test_data = sentencepair_testdataset(para_test_data, args)
+        para_dev_data = sentencepair_dataset(para_dev_data, args)
 
         para_test_dataloader = DataLoader(para_test_data, shuffle=True, batch_size=args.batch_size,
                                           collate_fn=para_test_data.collate_fn)
         para_dev_dataloader = DataLoader(para_dev_data, shuffle=False, batch_size=args.batch_size,
                                          collate_fn=para_dev_data.collate_fn)
 
-        sts_test_data = SentencePairTestDataset(sts_test_data, args) #
-        sts_dev_data = SentencePairDataset(sts_dev_data, args, isRegression=True) #
+        sts_test_data = sentencepair_testdataset(sts_test_data, args) #
+        sts_dev_data = sentencepair_dataset(sts_dev_data, args, isRegression=True) #
 
         sts_test_dataloader = DataLoader(sts_test_data, shuffle=True, batch_size=args.batch_size,
                                          collate_fn=sts_test_data.collate_fn)
