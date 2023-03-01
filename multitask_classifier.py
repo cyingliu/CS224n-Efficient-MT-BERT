@@ -328,7 +328,9 @@ def train_multitask(args):
                 num_batches = [0 for i in range(3)]
             step += 1
 
-        para_train_acc, _, _, sst_train_acc, _, _, sts_train_acc, _, _ = model_eval_multitask(sst_train_dataloader, para_train_dataloader, sts_train_dataloader, model, device)
+        if (epoch + 1) % args.eval_interval == 0:
+            para_train_acc, _, _, sst_train_acc, _, _, sts_train_acc, _, _ = model_eval_multitask(sst_train_dataloader, para_train_dataloader, sts_train_dataloader, model, device)
+            avg_train_acc = np.mean([para_train_acc, sst_train_acc, sts_train_acc])
         para_dev_acc, _, _, sst_dev_acc, _, _, sts_dev_acc, _, _ = model_eval_multitask(sst_dev_dataloader, para_dev_dataloader, sts_dev_dataloader, model, device)
         avg_dev_acc = np.mean([para_dev_acc, sst_dev_acc, sts_dev_acc])
    
@@ -346,13 +348,17 @@ def train_multitask(args):
             save_model(model, optimizer, args, config, os.path.join(args.output_dir, 'best-avg-multi-task-classifier.pt'))
         
         
-        # TODO: plus avg score
-        train_writer.add_scalar("sst_acc", sst_train_acc, step)
-        train_writer.add_scalar("para_acc", para_train_acc, step)
-        train_writer.add_scalar("sts_acc", sts_train_acc, step)
+        # log train status
+        if (epoch + 1) % args.eval_interval == 0:
+            train_writer.add_scalar("sst_acc", sst_train_acc, step)
+            train_writer.add_scalar("para_acc", para_train_acc, step)
+            train_writer.add_scalar("sts_acc", sts_train_acc, step)
+            train_writer.add_scalar("avg_acc", avg_train_acc, step)
+
         val_writer.add_scalar("sst_acc", sst_dev_acc, step)
         val_writer.add_scalar("para_acc", para_dev_acc, step)
         val_writer.add_scalar("sts_acc", sts_dev_acc, step)
+        val_writer.add_scalar("avg_acc", avg_dev_acc, step)
 
         print(f"Epoch {epoch}: train sst loss :: {tr_sst_loss :.3f}, train para loss :: {tr_para_loss :.3f}, train sts loss :: {tr_sts_loss : .3f},\n\
                 train sst acc :: {sst_train_acc :.3f}, train para acc :: {para_train_acc}, train sts acc :: {sts_train_acc},\n\
@@ -391,6 +397,7 @@ def get_args():
     parser.add_argument("--seed", type=int, default=11711)
     parser.add_argument("--epochs", type=int, default=10)
     parser.add_argument("--steps_per_epoch", type=int, default=2400, help="PAL paper value: 2400, sum of len(data loader): 9756")
+    parser.add_argument("--eval_interval", type=int, default=4, help="Epoch interval for evaluation through whole train set")
     parser.add_argument("--option", type=str,
                         help='pretrain: the BERT parameters are frozen; finetune: BERT parameters are updated',
                         choices=('pretrain', 'finetune'), default="pretrain")
