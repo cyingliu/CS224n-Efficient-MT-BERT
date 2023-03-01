@@ -197,6 +197,8 @@ def train_multitask(args):
     train_loaders = [cycle(iter(sst_train_dataloader)), 
                      cycle(iter(para_train_dataloader)),
                      cycle(iter(sts_train_dataloader))]
+    dataset_lengths = [len(sst_train_data), len(para_train_data), len(sts_train_data)] # [8544, 141498, 6040]
+
 
     # Init model
     config = {'hidden_dropout_prob': args.hidden_dropout_prob,
@@ -228,12 +230,20 @@ def train_multitask(args):
     val_writer = SummaryWriter(log_dir=val_log_dir)
 
     # Run for the specified number of epochs
-    steps_per_epoch = len(sst_train_dataloader) + len(para_train_dataloader) + len(sts_train_dataloader)
+    # steps_per_epoch = len(sst_train_dataloader) + len(para_train_dataloader) + len(sts_train_dataloader) # 9756
+    steps_per_epoch = args.steps_per_epoch
+
     task_id = 0
     step = 1
     train_loss = [0. for i in range(3)]
     num_batches = [0 for i in range(3)]
     tr_sst_loss, tr_para_loss, tr_sts_loss = None, None, None
+    
+    tot = np.sum(dataset_lengths)
+    Nprobs = [p/tot for p in dataset_lengths]
+    Sqprobs = np.sqrt(dataset_lengths)
+    tot = np.sum(Sqprobs)
+    Sqprobs = [p/tot for p in Sqprobs]
     
     for epoch in range(args.epochs):
         model.train()
@@ -241,8 +251,19 @@ def train_multitask(args):
         for _ in tqdm(range(steps_per_epoch), desc=f'train-{epoch}', disable=TQDM_DISABLE):
             if args.sample == 'rr':
                 task_id = (task_id + 1) % 3
+            elif args.sample == "proportional":
+                probs = Nprobs
+                task_id = np.random.choice(3, p=probs)
+            elif args.sample == "squareroot":
+                probs = Sqprobs
+                task_id = np.random.choice(3, p=probs)
+            elif args.sample == "anneal":
+                alpha = 1 - 0.8 * epoch / (args.epochs - 1)
+                aprobs = np.power(dataset_lengths, alpha)
+                tot = np.sum(aprobs)
+                probs = aprobs / tot
+                task_id = np.random.choice(3, p=probs)
             else:
-                # TODO aneal sampling
                 raise ValueError(f"Invalid sample method: {args.sample}")
             
             batch = next(train_loaders[task_id])
@@ -274,14 +295,18 @@ def train_multitask(args):
             else:
                 raise ValueError(f"Invalid task_id: {task_id}")
           
-            # TODO gradient accumulation
-            optimizer.zero_grad()
-
+            # gradient accumulation
+            loss = loss / args.gradient_accumulation_step
             loss.backward()
-            optimizer.step()
 
             train_loss[task_id] += loss.item()
             num_batches[task_id] += 1
+
+            
+            if (step + 1) % args.gradient_accumulation_step == 0:
+                optimizer.step()
+                optimizer.zero_grad()
+
 
             if step % args.log_interval == 0:
                 for task_id in range(3):
@@ -289,9 +314,15 @@ def train_multitask(args):
                         train_loss[task_id] = float('nan')
                     else:
                         train_loss[task_id] = train_loss[task_id] / num_batches[task_id]
+                tot = np.sum(num_batches)
+                sample_prob = [n/tot for n in num_batches]
+
                 train_writer.add_scalar("sst_loss", train_loss[0], step)
                 train_writer.add_scalar("para_loss", train_loss[1], step)
                 train_writer.add_scalar("sts_loss", train_loss[2], step)
+                train_writer.add_scalar("sst_sample", sample_prob[0], step)
+                train_writer.add_scalar("para_sample", sample_prob[1], step)
+                train_writer.add_scalar("sts_sample", sample_prob[2], step)
                 tr_sst_loss, tr_para_loss, tr_sts_loss = train_loss[0], train_loss[1], train_loss[2]
                 train_loss = [0. for i in range(3)]
                 num_batches = [0 for i in range(3)]
@@ -359,6 +390,7 @@ def get_args():
 
     parser.add_argument("--seed", type=int, default=11711)
     parser.add_argument("--epochs", type=int, default=10)
+    parser.add_argument("--steps_per_epoch", type=int, default=2400, help="PAL paper value: 2400, sum of len(data loader): 9756")
     parser.add_argument("--option", type=str,
                         help='pretrain: the BERT parameters are frozen; finetune: BERT parameters are updated',
                         choices=('pretrain', 'finetune'), default="pretrain")
@@ -378,12 +410,13 @@ def get_args():
     parser.add_argument("--hidden_dropout_prob", type=float, default=0.3)
     parser.add_argument("--lr", type=float, help="learning rate, default lr for 'pretrain': 1e-3, 'finetune': 1e-5",
                         default=1e-5)
+    parser.add_argument("--gradient_accumulation_step", type=int, default=1)
     # training setting
     parser.add_argument("--output_dir", type=str, help="dir for saved model (.pt) and prediction files (.csv)",
                         default="result/tmp")
     parser.add_argument("--log_interval", type=int, help="interval for log writer", default=100)
     # multi-task
-    parser.add_argument("--sample", help='sample method for multi dataset', type=str, choices=('rr'), default='rr')
+    parser.add_argument("--sample", help='sample method for multi dataset', type=str, choices=('rr', 'proportional', 'squareroot', 'anneal'), default='rr')
     # dataset
     parser.add_argument("--concat_pair", action='store_true', help="concat two sequences if True, feed separately if False")
     args = parser.parse_args()
