@@ -40,6 +40,19 @@ def seed_everything(seed=11711):
 BERT_HIDDEN_SIZE = 768
 N_SENTIMENT_CLASSES = 5
 
+def numel(m: torch.nn.Module, only_trainable: bool = False):
+    """
+    Reference: https://stackoverflow.com/questions/49201236/check-the-total-number-of-parameters-in-a-pytorch-model/62764464#62764464
+    Returns the total number of parameters used by `m` (only counting
+    shared parameters once); if `only_trainable` is True, then only
+    includes parameters with `requires_grad = True`
+    """
+    parameters = list(m.parameters())
+    if only_trainable:
+        parameters = [p for p in parameters if p.requires_grad]
+    unique = {p.data_ptr(): p for p in parameters}.values()
+    return sum(p.numel() for p in unique)
+
 
 class MultitaskBERT(nn.Module):
     '''
@@ -224,6 +237,11 @@ def train_multitask(args):
 
     model = MultitaskBERT(config)
     model = model.to(device)
+
+    # Print total trainable parameters
+    total_params = numel(model, only_trainable=True)
+    print("Total trainable params:", total_params)
+
 
     lr = args.lr
     optimizer = AdamW(model.parameters(), lr=lr)
