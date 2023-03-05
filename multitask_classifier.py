@@ -8,6 +8,7 @@ from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 
 from bert import BertModel
+from config import BertConfig
 from optimizer import AdamW
 from tqdm import tqdm
 
@@ -19,6 +20,7 @@ from evaluation import model_eval_sst, test_model_multitask, model_eval_multitas
 
 from itertools import cycle
 import yaml
+import json
 from tokenizer import BertTokenizer
 
 
@@ -51,7 +53,13 @@ class MultitaskBERT(nn.Module):
         super(MultitaskBERT, self).__init__()
         # You will want to add layers here to perform the downstream tasks.
         # Pretrain mode does not require updating bert paramters.
-        self.bert = BertModel.from_pretrained('bert-base-uncased')
+        if config.config_path:
+            with open(config.config_path) as f:
+                _config = json.load(f)
+            bert_config = BertConfig.from_pretrained('bert-base-uncased', **_config)
+            self.bert = BertModel.from_pretrained('bert-base-uncased', config=bert_config)
+        else:
+            self.bert = BertModel.from_pretrained('bert-base-uncased')
         for param in self.bert.parameters():
             if config.option == 'pretrain':
                 param.requires_grad = False
@@ -206,7 +214,8 @@ def train_multitask(args):
               'hidden_size': 768,
               'data_dir': '.',
               'option': args.option,
-              'concat_pair': args.concat_pair}
+              'concat_pair': args.concat_pair,
+              'config_path': args.config_path}
 
     config = SimpleNamespace(**config)
 
@@ -425,6 +434,7 @@ def get_args():
     parser.add_argument("--log_interval", type=int, help="interval for log writer", default=100)
     # multi-task
     parser.add_argument("--sample", help='sample method for multi dataset', type=str, choices=('rr', 'proportional', 'squareroot', 'anneal'), default='rr')
+    parser.add_argument("--config_path", help='config (.json) file for adaptation modules', type=str, default="")
     # dataset
     parser.add_argument("--concat_pair", action='store_true', help="concat two sequences if True, feed separately if False")
     args = parser.parse_args()
