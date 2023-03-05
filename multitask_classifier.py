@@ -90,14 +90,14 @@ class MultitaskBERT(nn.Module):
         self.similarity_classifier = nn.Linear(config.hidden_size * n, 1)
 
 
-    def forward(self, input_ids, attention_mask):
+    def forward(self, input_ids, attention_mask, task_id=0):
         # 'Takes a batch of sentences and produces embeddings for them.'
         # The final BERT embedding is the hidden state of [CLS] token (the first token)
         # Here, you can start by just returning the embeddings straight from BERT.
         # When thinking of improvements, you can later try modifying this
         # (e.g., by adding other layers).
         ### TODO
-        outputs = self.bert(input_ids, attention_mask)
+        outputs = self.bert(input_ids, attention_mask, task_id=task_id)
         sequence_output, pooled_output = outputs['last_hidden_state'], outputs['pooler_output']
         return sequence_output, pooled_output
 
@@ -109,7 +109,7 @@ class MultitaskBERT(nn.Module):
         Thus, your output should contain 5 logits for each sentence.
         '''
         ### TODO
-        sequence_output, pooled_output = self.forward(input_ids, attention_mask)
+        sequence_output, pooled_output = self.forward(input_ids, attention_mask, task_id=0)
         pooled_output = self.dropout(pooled_output)
         logits = self.sentiment_classifier(pooled_output)
 
@@ -125,12 +125,12 @@ class MultitaskBERT(nn.Module):
         '''
         ### TODO
         if self.concat_pair:
-            sequence_output, pooled_output = self.forward(input_ids_1, attention_mask_1)
+            sequence_output, pooled_output = self.forward(input_ids_1, attention_mask_1, task_id=1)
             pooled_output = self.dropout(pooled_output)
         
         else:
-            sequence_output_1, pooled_output_1 = self.forward(input_ids_1, attention_mask_1)
-            sequence_output_2, pooled_output_2 = self.forward(input_ids_2, attention_mask_2)
+            sequence_output_1, pooled_output_1 = self.forward(input_ids_1, attention_mask_1, task_id=1)
+            sequence_output_2, pooled_output_2 = self.forward(input_ids_2, attention_mask_2, task_id=1)
             pooled_output_1 = self.dropout(pooled_output_1)
             pooled_output_2 = self.dropout(pooled_output_2)
             pooled_output = torch.cat((pooled_output_1, pooled_output_2), dim=-1)
@@ -149,12 +149,12 @@ class MultitaskBERT(nn.Module):
         '''
         ### TODO
         if self.concat_pair:
-            sequence_output, pooled_output = self.forward(input_ids_1, attention_mask_1)
+            sequence_output, pooled_output = self.forward(input_ids_1, attention_mask_1, task_id=2)
             pooled_output = self.dropout(pooled_output)
         
         else:
-            sequence_output_1, pooled_output_1 = self.forward(input_ids_1, attention_mask_1)
-            sequence_output_2, pooled_output_2 = self.forward(input_ids_2, attention_mask_2)
+            sequence_output_1, pooled_output_1 = self.forward(input_ids_1, attention_mask_1, task_id=2)
+            sequence_output_2, pooled_output_2 = self.forward(input_ids_2, attention_mask_2, task_id=2)
             pooled_output_1 = self.dropout(pooled_output_1)
             pooled_output_2 = self.dropout(pooled_output_2)
             pooled_output = torch.cat((pooled_output_1, pooled_output_2), dim=-1)

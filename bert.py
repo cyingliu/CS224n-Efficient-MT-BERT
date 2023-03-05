@@ -221,7 +221,7 @@ class BertModel(BertPreTrainedModel):
     return embeds
 
 
-  def encode(self, hidden_states, attention_mask):
+  def encode(self, hidden_states, attention_mask, task_id=0):
     """
     hidden_states: the output from the embedding layer [batch_size, seq_len, hidden_size]
     attention_mask: [batch_size, seq_len]
@@ -234,11 +234,11 @@ class BertModel(BertPreTrainedModel):
     # pass the hidden states through the encoder layers
     for i, layer_module in enumerate(self.bert_layers):
       # feed the encoding from the last bert_layer to the next
-      hidden_states = layer_module(hidden_states, extended_attention_mask)
+      hidden_states = layer_module(hidden_states, extended_attention_mask, task_id=task_id)
 
     return hidden_states
 
-  def forward(self, input_ids, attention_mask):
+  def forward(self, input_ids, attention_mask, task_id=0):
     """
     input_ids: [batch_size, seq_len], seq_len is the max length of the batch
     attention_mask: same size as input_ids, 1 represents non-padding tokens, 0 represents padding tokens
@@ -247,7 +247,7 @@ class BertModel(BertPreTrainedModel):
     embedding_output = self.embed(input_ids=input_ids)
 
     # feed to a transformer (a stack of BertLayers)
-    sequence_output = self.encode(embedding_output, attention_mask=attention_mask)
+    sequence_output = self.encode(embedding_output, attention_mask=attention_mask, task_id=task_id)
 
     # get cls token hidden state
     first_tk = sequence_output[:, 0]
