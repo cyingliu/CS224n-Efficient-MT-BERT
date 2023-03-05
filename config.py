@@ -221,8 +221,14 @@ class BertConfig(PretrainedConfig):
     self.gradient_checkpointing = gradient_checkpointing
     self.position_embedding_type = position_embedding_type
     self.use_cache = use_cache
+    
     # extra modules
+    self.num_tasks = 3
     self.pal = False
+    self.pal_share = True
+    self.pal_hidden_size = 204
+    self.pal_attn_head = 12
+
     
     for k, v in kwargs.items():
       setattr(self, k, v)

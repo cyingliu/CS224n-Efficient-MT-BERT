@@ -53,15 +53,18 @@ class MultitaskBERT(nn.Module):
         super(MultitaskBERT, self).__init__()
         # You will want to add layers here to perform the downstream tasks.
         # Pretrain mode does not require updating bert paramters.
-        if config.config_path:
+        if config.config_path: # extra config for adaptation modules
             with open(config.config_path) as f:
                 _config = json.load(f)
             bert_config = BertConfig.from_pretrained('bert-base-uncased', **_config)
             self.bert = BertModel.from_pretrained('bert-base-uncased', config=bert_config)
         else:
             self.bert = BertModel.from_pretrained('bert-base-uncased')
-        for param in self.bert.parameters():
+        
+        for name, param in self.bert.named_parameters():
             if config.option == 'pretrain':
+                if 'pals' in name:
+                    continue
                 param.requires_grad = False
             elif config.option == 'finetune':
                 param.requires_grad = True
@@ -443,11 +446,17 @@ def get_args():
 if __name__ == "__main__":
     args = get_args()
     # args.filepath = f'{args.option}-{args.epochs}-{args.lr}-multitask.pt' # save path
-    ### Define output paths ###
+    ### Save experiment config ###
     if not os.path.exists(args.output_dir):
         os.makedirs(args.output_dir)
     with open(os.path.join(args.output_dir, "config.yaml"), 'w') as outfile:
         yaml.dump(vars(args), outfile)
+    if args.config_path:
+        with open(args.config_path) as f:
+                config = json.load(f)
+        with open(os.path.join(args.output_dir, "model_config.json"), 'w') as f:
+            json.dump(config, f)
+    ### Define output paths ###
     args.sst_dev_out = os.path.join(args.output_dir, "sst-dev-output.csv")
     args.sst_test_out = os.path.join(args.output_dir, "sst-test-output.csv")
     args.para_dev_out = os.path.join(args.output_dir, "para-dev-output.csv")

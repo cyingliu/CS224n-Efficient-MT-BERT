@@ -4,6 +4,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from base_bert import BertPreTrainedModel
+from pal import PAL, MultiPAL
 from utils import *
 
 
@@ -79,7 +80,7 @@ class BertSelfAttention(nn.Module):
 
 
 class BertLayer(nn.Module):
-  def __init__(self, config):
+  def __init__(self, config, pal_multilayers=None):
     super().__init__()
     # multi-head attention
     self.self_attention = BertSelfAttention(config)
@@ -94,6 +95,24 @@ class BertLayer(nn.Module):
     self.out_dense = nn.Linear(config.intermediate_size, config.hidden_size)
     self.out_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
     self.out_dropout = nn.Dropout(config.hidden_dropout_prob)
+    
+    ##### Adaptatation Modules #####
+    self.use_pal = config.pal
+    # PAL
+    if config.pal:
+      pals = []
+      for i in range(config.num_tasks):
+        if config.pal_share:
+          pal = PAL(config, \
+                    share_down_project=pal_multilayers.share_down_projects[i], \
+                    share_up_project=pal_multilayers.share_up_projects[i])
+        else:
+          pal = PAL(config)
+        pals.append(pal)
+      self.pals = nn.ModuleList(pals)
+    ################################
+
+
 
   def add_norm(self, inputs, outputs, dense_layer, dropout, ln_layer):
     """
@@ -113,7 +132,7 @@ class BertLayer(nn.Module):
     return outputs
 
 
-  def forward(self, hidden_states, attention_mask):
+  def forward(self, hidden_states, attention_mask, task_id=0):
     """
     hidden_states: either from the embedding layer (first bert layer) or from the previous bert layer
     as shown in the left of Figure 1 of https://arxiv.org/pdf/1706.03762.pdf 
@@ -127,6 +146,13 @@ class BertLayer(nn.Module):
     attention_outputs = self.self_attention(hidden_states, attention_mask)
     norm_outputs = self.add_norm(hidden_states, attention_outputs, self.attention_dense, self.attention_dropout, self.attention_layer_norm)
     interm_outputs = self.interm_af(self.interm_dense(norm_outputs))
+    
+    ##### Adaptation Modules #####
+    if self.use_pal:
+      extra = self.pals[task_id](hidden_states, attention_mask)
+      norm_outputs = norm_outputs + extra
+    ##############################
+
     outputs = self.add_norm(norm_outputs, interm_outputs, self.out_dense, self.out_dropout, self.out_layer_norm)
 
     return outputs
@@ -155,8 +181,15 @@ class BertModel(BertPreTrainedModel):
     position_ids = torch.arange(config.max_position_embeddings).unsqueeze(0)
     self.register_buffer('position_ids', position_ids)
 
-    # bert encoder
-    self.bert_layers = nn.ModuleList([BertLayer(config) for _ in range(config.num_hidden_layers)])
+    ##### Adaptation Modules #####
+    # PAL
+    if config.pal:
+      pal_multilayers = MultiPAL(config)
+      self.bert_layers = nn.ModuleList([BertLayer(config, pal_multilayers) for _ in range(config.num_hidden_layers)])
+    else: # default (no adaptation)
+      # bert encoder
+      self.bert_layers = nn.ModuleList([BertLayer(config) for _ in range(config.num_hidden_layers)])
+    ##############################
 
     # for [CLS] token
     self.pooler_dense = nn.Linear(config.hidden_size, config.hidden_size)
