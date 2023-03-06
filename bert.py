@@ -6,6 +6,7 @@ import torch.nn.functional as F
 from base_bert import BertPreTrainedModel
 from pal import PAL, MultiPAL
 from prefix import Prefix
+from houlsby import Houlsby
 from utils import *
 
 
@@ -102,6 +103,7 @@ class BertLayer(nn.Module):
     self.use_pal = config.pal
     self.use_prefix = config.prefix
     self.get_init_prefix = config.prefix_get_init
+    self.use_houlsby = config.houlsby
     # PAL
     if config.pal:
       pals = []
@@ -118,11 +120,17 @@ class BertLayer(nn.Module):
     # Prefix
     if config.prefix:
       self.prefixs = nn.ModuleList([Prefix(config, layer_id=layer_id) for _ in range(config.num_tasks)])
+    
+    # Houlsby
+    if config.houlsby:
+      self.houlsbys_0 = nn.ModuleList([Houlsby(config) for _ in range(config.num_tasks)])
+      self.houlsbys_1 = nn.ModuleList([Houlsby(config) for _ in range(config.num_tasks)])
+      self.houlsby_add_layernorm = config.houlsby_add_layernorm
     ################################
 
 
 
-  def add_norm(self, inputs, outputs, dense_layer, dropout, ln_layer):
+  def add_norm(self, inputs, outputs, dense_layer, dropout, ln_layer, task_id=0, position=0):
     """
     this function is applied after the multi-head attention layer or the feed forward layer
     input: the input of the previous layer
@@ -135,7 +143,24 @@ class BertLayer(nn.Module):
     ### TODO
     outputs = dense_layer(outputs)
     outputs = dropout(outputs)
-    outputs = ln_layer(outputs + inputs)
+
+    ##### Adaptation Modules ######
+    if self.use_houlsby:
+      if position == 0:
+        outputs = self.houlsbys_0[task_id](outputs)
+      else:
+        outputs = self.houlsbys_1[task_id](outputs)
+
+    if self.use_houlsby and self.houlsby_add_layernorm:
+      if position == 0:
+        outputs = self.houlsbys_0[task_id].layernorm(outputs)
+      else:
+        outputs = self.houlsbys_1[task_id].layernorm(outputs)
+    else: # default or houlsby without add layernorm
+      outputs = ln_layer(outputs + inputs)
+    ###############################
+
+    
 
     return outputs
 
@@ -164,7 +189,7 @@ class BertLayer(nn.Module):
     ##############################
 
     attention_outputs = self.self_attention(hidden_states, attention_mask)
-    norm_outputs = self.add_norm(hidden_states, attention_outputs, self.attention_dense, self.attention_dropout, self.attention_layer_norm)
+    norm_outputs = self.add_norm(hidden_states, attention_outputs, self.attention_dense, self.attention_dropout, self.attention_layer_norm, task_id=task_id, position=0)
     interm_outputs = self.interm_af(self.interm_dense(norm_outputs))
     
     ##### Adaptation Modules #####
@@ -173,7 +198,7 @@ class BertLayer(nn.Module):
       norm_outputs = norm_outputs + extra
     ##############################
 
-    outputs = self.add_norm(norm_outputs, interm_outputs, self.out_dense, self.out_dropout, self.out_layer_norm)
+    outputs = self.add_norm(norm_outputs, interm_outputs, self.out_dense, self.out_dropout, self.out_layer_norm, task_id=task_id, position=1)
 
     return outputs
 

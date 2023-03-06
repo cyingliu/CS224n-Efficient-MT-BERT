@@ -234,6 +234,10 @@ class BertConfig(PretrainedConfig):
     self.prefix_length = 20
     self.prefix_init = True
     self.prefix_get_init = False
+    # Houlsby
+    self.houlsby = False
+    self.houlsby_size = 256
+    self.houlsby_add_layernorm = False
     ###############################
 
     
