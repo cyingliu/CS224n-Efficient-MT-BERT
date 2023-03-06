@@ -76,9 +76,10 @@ class MultitaskBERT(nn.Module):
         
         for name, param in self.bert.named_parameters():
             if config.option == 'pretrain':
-                if 'pals' in name:
-                    continue
-                param.requires_grad = False
+                if 'pals' or 'prefixs' in name:
+                    param.requires_grad = True
+                else:
+                    param.requires_grad = False
             elif config.option == 'finetune':
                 param.requires_grad = True
         ### TODO

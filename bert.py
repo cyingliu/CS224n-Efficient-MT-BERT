@@ -5,6 +5,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from base_bert import BertPreTrainedModel
 from pal import PAL, MultiPAL
+from prefix import Prefix
 from utils import *
 
 
@@ -80,7 +81,7 @@ class BertSelfAttention(nn.Module):
 
 
 class BertLayer(nn.Module):
-  def __init__(self, config, pal_multilayers=None):
+  def __init__(self, config, pal_multilayers=None, layer_id=0):
     super().__init__()
     # multi-head attention
     self.self_attention = BertSelfAttention(config)
@@ -96,8 +97,11 @@ class BertLayer(nn.Module):
     self.out_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
     self.out_dropout = nn.Dropout(config.hidden_dropout_prob)
     
+    self.layer_id = layer_id
     ##### Adaptatation Modules #####
     self.use_pal = config.pal
+    self.use_prefix = config.prefix
+    self.get_init_prefix = config.prefix_get_init
     # PAL
     if config.pal:
       pals = []
@@ -110,6 +114,10 @@ class BertLayer(nn.Module):
           pal = PAL(config)
         pals.append(pal)
       self.pals = nn.ModuleList(pals)
+    
+    # Prefix
+    if config.prefix:
+      self.prefixs = nn.ModuleList([Prefix(config, layer_id=layer_id) for _ in range(config.num_tasks)])
     ################################
 
 
@@ -143,6 +151,18 @@ class BertLayer(nn.Module):
     4. a add-norm that takes the input and output of the feed forward layer
     """
     ### TODO
+    ##### Adaptation Modules #####
+    if self.get_init_prefix:
+      init_emb = torch.mean(hidden_states, dim=(0, 1)).detach().cpu()
+      if not os.path.exists('weights'):
+          os.mkdir('weights')
+      torch.save(init_emb, os.path.join('weights', f'emb_{self.layer_id}.pt'))
+      print(f"Saving weights to {os.path.join('weights', f'emb_{self.layer_id}.pt')}")
+    
+    if self.use_prefix:
+      hidden_states, attention_mask = self.prefixs[task_id](hidden_states, attention_mask)
+    ##############################
+
     attention_outputs = self.self_attention(hidden_states, attention_mask)
     norm_outputs = self.add_norm(hidden_states, attention_outputs, self.attention_dense, self.attention_dropout, self.attention_layer_norm)
     interm_outputs = self.interm_af(self.interm_dense(norm_outputs))
@@ -185,10 +205,14 @@ class BertModel(BertPreTrainedModel):
     # PAL
     if config.pal:
       pal_multilayers = MultiPAL(config)
-      self.bert_layers = nn.ModuleList([BertLayer(config, pal_multilayers) for _ in range(config.num_hidden_layers)])
-    else: # default (no adaptation)
+      self.bert_layers = nn.ModuleList([BertLayer(config, pal_multilayers, layer_id=i) for i in range(config.num_hidden_layers)])
+    else: # default (no adaptation), prefix
       # bert encoder
-      self.bert_layers = nn.ModuleList([BertLayer(config) for _ in range(config.num_hidden_layers)])
+      self.bert_layers = nn.ModuleList([BertLayer(config, layer_id=i) for i in range(config.num_hidden_layers)])
+    if config.prefix:
+      self.cls_pos = config.prefix_length
+    else:
+      self.cls_pos = 0
     ##############################
 
     # for [CLS] token
@@ -250,7 +274,7 @@ class BertModel(BertPreTrainedModel):
     sequence_output = self.encode(embedding_output, attention_mask=attention_mask, task_id=task_id)
 
     # get cls token hidden state
-    first_tk = sequence_output[:, 0]
+    first_tk = sequence_output[:, self.cls_pos]
     first_tk = self.pooler_dense(first_tk)
     first_tk = self.pooler_af(first_tk)
 

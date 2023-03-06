@@ -222,12 +222,19 @@ class BertConfig(PretrainedConfig):
     self.position_embedding_type = position_embedding_type
     self.use_cache = use_cache
     
-    # extra modules
+    ###### Adaptation Modules #####
     self.num_tasks = 3
+    # PAL
     self.pal = False
     self.pal_share = True
     self.pal_hidden_size = 204
     self.pal_attn_head = 12
+    # Prefix
+    self.prefix = False
+    self.prefix_length = 20
+    self.prefix_init = True
+    self.prefix_get_init = False
+    ###############################
 
     
     for k, v in kwargs.items():
