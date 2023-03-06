@@ -1,5 +1,5 @@
 {
 	"prefix": true,
 	"prefix_length": 20,
-	"prefix_init": false
+	"prefix_init": true
 }
