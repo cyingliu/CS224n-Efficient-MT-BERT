@@ -16,7 +16,8 @@ def get_args():
 
     # hyper parameters
     parser.add_argument("--batch_size", help='sst: 64, cfimdb: 8 can fit a 12GB GPU', type=int, default=8)
-    
+    # model config
+    parser.add_argument("--config_path", help='config (.json) file for adaptation modules', type=str, default="")
     # training setting
     parser.add_argument("--output_dir", type=str, help="dir for saved model (.pt) and prediction files (.csv)",
                         default="result/tmp")
