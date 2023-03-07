@@ -243,9 +243,27 @@ def train_multitask(args):
     total_params = numel(model, only_trainable=True)
     print("Total trainable params:", total_params)
 
-
+    ##### Optimizer/Scheduler #####
     lr = args.lr
-    optimizer = AdamW(model.parameters(), lr=lr)
+    # adaptation_modules = ['pal', 'prefix', 'houlsby', 'classifier']
+    backbone_params = []
+    adaptation_params = []
+    for name, param in model.named_parameters():
+        if 'pal' in name or 'prefix' in name or 'houlsby' in name or 'classifier' in name:
+            adaptation_params.append(param)
+        else:
+            backbone_params.append(param)
+    optimizer = AdamW([{'params': adaptation_params, 'lr': args.lr_adapt}, {'params': backbone_params}], lr=lr)
+    
+    total_steps = args.epochs * args.steps_per_epoch
+    warmup_steps = int(total_steps * args.warmup_portion)
+    def warmup(current_step: int):
+        if current_step < warmup_steps:  # current_step / warmup_steps * base_lr
+            return float(current_step / warmup_steps)
+        else:                                 # (num_training_steps - current_step) / (num_training_steps - warmup_steps) * base_lr
+            return max(0.0, float(total_steps - current_step) / float(max(1, total_steps - warmup_steps)))
+    scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=warmup)
+    #####################
     sst_best_dev_acc = 0
     para_best_dev_acc = 0
     sts_best_dev_acc = 0
@@ -336,6 +354,7 @@ def train_multitask(args):
             
             if (step + 1) % args.gradient_accumulation_step == 0:
                 optimizer.step()
+                scheduler.step()
                 optimizer.zero_grad()
 
 
@@ -354,6 +373,8 @@ def train_multitask(args):
                 train_writer.add_scalar("sst_sample", sample_prob[0], step)
                 train_writer.add_scalar("para_sample", sample_prob[1], step)
                 train_writer.add_scalar("sts_sample", sample_prob[2], step)
+                train_writer.add_scalar("lr", scheduler.get_last_lr()[0], step)
+                
                 tr_sst_loss, tr_para_loss, tr_sts_loss = train_loss[0], train_loss[1], train_loss[2]
                 train_loss = [0. for i in range(3)]
                 num_batches = [0 for i in range(3)]
@@ -449,6 +470,8 @@ def get_args():
     parser.add_argument("--hidden_dropout_prob", type=float, default=0.3)
     parser.add_argument("--lr", type=float, help="learning rate, default lr for 'pretrain': 1e-3, 'finetune': 1e-5",
                         default=1e-5)
+    parser.add_argument("--lr_adapt", type=float, help="lr for pal, houlsby, prefix, and classifier", default=1e-3)
+    parser.add_argument("--warmup_portion", type=float, default=0.1, help="linear warmup portion")
     parser.add_argument("--gradient_accumulation_step", type=int, default=1)
     # training setting
     parser.add_argument("--output_dir", type=str, help="dir for saved model (.pt) and prediction files (.csv)",
