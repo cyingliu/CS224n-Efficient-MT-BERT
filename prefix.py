@@ -3,16 +3,20 @@ import torch
 import torch.nn as nn
 
 class Prefix(nn.Module):
-    def __init__(self, config, layer_id):
+    def __init__(self, config, layer_id, task_id):
         super(Prefix, self).__init__()
+        if isinstance(config.prefix_length, list):
+            self.prefix_length = config.prefix_length[task_id]
+        else:
+            self.prefix_length = config.prefix_length
         if config.prefix_init:
             emb = torch.load(os.path.join('weights', f'emb_{layer_id}.pt')) # (768)
             print(f"Load embedding weight from {os.path.join('weights', f'emb_{layer_id}.pt')}")
-            emb = emb.view(1, 1, config.hidden_size).repeat(1, config.prefix_length, 1)
+            emb = emb.view(1, 1, config.hidden_size).repeat(1, self.prefix_length, 1)
             self.prefix = nn.Parameter(emb)
         else:
-            self.prefix = nn.Parameter(torch.ones((1, config.prefix_length, config.hidden_size)))
-        self.prefix_length = config.prefix_length
+            self.prefix = nn.Parameter(torch.ones((1, self.prefix_length, config.hidden_size)))
+        
         self.layer_id = layer_id
 
     def forward(self, hidden_states, attention_mask=None):

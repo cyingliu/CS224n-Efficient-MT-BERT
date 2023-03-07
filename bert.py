@@ -110,21 +110,22 @@ class BertLayer(nn.Module):
       for i in range(config.num_tasks):
         if config.pal_share:
           pal = PAL(config, \
+                    task_id=i,
                     share_down_project=pal_multilayers.share_down_projects[i], \
                     share_up_project=pal_multilayers.share_up_projects[i])
         else:
-          pal = PAL(config)
+          pal = PAL(config, task_id=i)
         pals.append(pal)
       self.pals = nn.ModuleList(pals)
     
     # Prefix
     if config.prefix:
-      self.prefixs = nn.ModuleList([Prefix(config, layer_id=layer_id) for _ in range(config.num_tasks)])
+      self.prefixs = nn.ModuleList([Prefix(config, layer_id=layer_id, task_id=task_id) for task_id in range(config.num_tasks)])
     
     # Houlsby
     if config.houlsby:
-      self.houlsbys_0 = nn.ModuleList([Houlsby(config) for _ in range(config.num_tasks)])
-      self.houlsbys_1 = nn.ModuleList([Houlsby(config) for _ in range(config.num_tasks)])
+      self.houlsbys_0 = nn.ModuleList([Houlsby(config, task_id=i) for i in range(config.num_tasks)])
+      self.houlsbys_1 = nn.ModuleList([Houlsby(config, task_id=i) for i in range(config.num_tasks)])
       self.houlsby_add_layernorm = config.houlsby_add_layernorm
     ################################
 
@@ -235,9 +236,12 @@ class BertModel(BertPreTrainedModel):
       # bert encoder
       self.bert_layers = nn.ModuleList([BertLayer(config, layer_id=i) for i in range(config.num_hidden_layers)])
     if config.prefix:
-      self.cls_pos = config.prefix_length
-    else:
-      self.cls_pos = 0
+      self.cls_pos = {}
+      for i in range(config.num_tasks):
+        if isinstance(config.prefix_length, list):
+          self.cls_pos[i] = config.prefix_length[i]
+        else:
+          self.cls_pos[i] = config.prefix_length
     ##############################
 
     # for [CLS] token
@@ -299,7 +303,7 @@ class BertModel(BertPreTrainedModel):
     sequence_output = self.encode(embedding_output, attention_mask=attention_mask, task_id=task_id)
 
     # get cls token hidden state
-    first_tk = sequence_output[:, self.cls_pos]
+    first_tk = sequence_output[:, self.cls_pos[task_id]]
     first_tk = self.pooler_dense(first_tk)
     first_tk = self.pooler_af(first_tk)
 
