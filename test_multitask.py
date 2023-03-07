@@ -14,6 +14,7 @@ def get_args():
 
     parser.add_argument("--use_gpu", action='store_true')
 
+    parser.add_argument("--concat_pair", action='store_true', help="concat two sequences if True, feed separately if False")
     # hyper parameters
     parser.add_argument("--batch_size", help='sst: 64, cfimdb: 8 can fit a 12GB GPU', type=int, default=8)
     # model config
