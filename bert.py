@@ -242,6 +242,8 @@ class BertModel(BertPreTrainedModel):
           self.cls_pos[i] = config.prefix_length[i]
         else:
           self.cls_pos[i] = config.prefix_length
+    else:
+      self.cls_pos = {0: 0, 1: 0, 2: 0}
     ##############################
 
     # for [CLS] token
