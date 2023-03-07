@@ -300,6 +300,7 @@ def load_multitask_data(sentiment_filename,paraphrase_filename,similarity_filena
         with open(similarity_filename, 'r') as fp:
             for record in csv.DictReader(fp,delimiter = '\t'):
                 sent_id = record['id'].lower().strip()
+                print(sent_id)
                 similarity_data.append((preprocess_string(record['sentence1']),
                                         preprocess_string(record['sentence2']),
                                         float(record['similarity']),sent_id))
