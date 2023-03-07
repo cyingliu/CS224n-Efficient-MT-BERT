@@ -85,10 +85,24 @@ class MultitaskBERT(nn.Module):
         ### TODO
         self.concat_pair = config.concat_pair
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        self.sentiment_classifier = nn.Linear(config.hidden_size, config.num_labels)
+        self.sentiment_classifier = nn.Sequential(
+            nn.Linear(config.hidden_size, config.hidden_size),
+            nn.ReLU(),
+            nn.Linear(config.hidden_size, config.num_labels)
+        )
         n = 1 if self.concat_pair else 2
-        self.paraphrase_classifier = nn.Linear(config.hidden_size * n, 1)
-        self.similarity_classifier = nn.Linear(config.hidden_size * n, 1)
+        #self.paraphrase_classifier = nn.Linear(config.hidden_size * n, 1)
+        self.paraphrase_classifier = nn.Sequential(
+            nn.Linear(config.hidden_size * n, config.hidden_size),
+            nn.ReLU(),
+            nn.Linear(config.hidden_size, 1)
+        )
+        #self.similarity_classifier = nn.Linear(config.hidden_size * n, 1)
+        self.similarity_classifier = nn.Sequential(
+            nn.Linear(config.hidden_size * n, config.hidden_size),
+            nn.ReLU(),
+            nn.Linear(config.hidden_size, 1)
+        )
 
 
     def forward(self, input_ids, attention_mask, task_id=0):
