@@ -1,6 +1,6 @@
 {
 	"num_tasks": 3,
 	"prefix": true,
-	"prefix_length": 20,
+	"prefix_length": 10,
 	"prefix_init": true
 }
