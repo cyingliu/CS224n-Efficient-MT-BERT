@@ -3,11 +3,15 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 class Houlsby(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config, task_id):
         super(Houlsby, self).__init__()
         
-        self.down_project = nn.Linear(config.hidden_size, config.houlsby_size)
-        self.up_project = nn.Linear(config.houlsby_size, config.hidden_size)
+        if isinstance(config.houlsby_size, list):
+            houlsby_size = config.houlsby_size[task_id]
+        else:
+            houlsby_size = config.houlsby_size
+        self.down_project = nn.Linear(config.hidden_size, houlsby_size)
+        self.up_project = nn.Linear(houlsby_size, config.hidden_size)
         self.act_fn = F.relu
 
         if config.houlsby_add_layernorm:
