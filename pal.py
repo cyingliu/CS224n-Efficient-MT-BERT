@@ -5,16 +5,21 @@ import math
 from types import SimpleNamespace
 
 class PAL(nn.Module):
-    def __init__(self, config, share_down_project=None, share_up_project=None):
+    def __init__(self, config, task_id, share_down_project=None, share_up_project=None):
         super(PAL, self).__init__()
+        if isinstance(config.pal_hidden_size, list):
+            pal_hidden_size = config.pal_hidden_size[task_id]
+        else:
+            pal_hidden_size = config.pal_hidden_size
         if not config.pal_share:
-            self.down_project = nn.Linear(config.hidden_size, config.pal_hidden_size)
-            self.up_project = nn.Linear(config.pal_hidden_size, config.hidden_size)
+            self.down_project = nn.Linear(config.hidden_size, pal_hidden_size)
+            self.up_project = nn.Linear(pal_hidden_size, config.hidden_size)
         else:
             self.down_project = share_down_project
             self.up_project = share_up_project
+
         attn_config = {'num_attention_heads': config.pal_attn_head,
-                       'hidden_size': config.pal_hidden_size,
+                       'hidden_size': pal_hidden_size,
                        'attention_probs_dropout_prob': config.attention_probs_dropout_prob}
         attn_config = SimpleNamespace(**attn_config)
         self.attention = SelfAttention(attn_config)
@@ -32,8 +37,17 @@ class MultiPAL(nn.Module):
     def __init__(self, config):
         super(MultiPAL, self).__init__()
         if config.pal_share:
-            self.share_down_projects = nn.ModuleList([nn.Linear(config.hidden_size, config.pal_hidden_size) for _ in range(config.num_tasks)])
-            self.share_up_projects = nn.ModuleList([nn.Linear(config.pal_hidden_size, config.hidden_size) for _ in range(config.num_tasks)])
+            share_down_projects = []
+            share_up_projects = []
+            for task_id in range(config.num_tasks):
+                if isinstance(config.pal_hidden_size, list):
+                    share_down_projects.append(nn.Linear(config.hidden_size, config.pal_hidden_size[task_id]))
+                    share_up_projects.append(nn.Linear(config.pal_hidden_size[task_id], config.hidden_size))
+                else:
+                    share_down_projects.append(nn.Linear(config.hidden_size, config.pal_hidden_size))
+                    share_up_projects.append(nn.Linear(config.pal_hidden_size, config.hidden_size))
+            self.share_down_projects = nn.ModuleList(share_down_projects)
+            self.share_up_projects = nn.ModuleList(share_up_projects)
 
 
 # copy of BertSelfAttention from bert.py to avoid circular import

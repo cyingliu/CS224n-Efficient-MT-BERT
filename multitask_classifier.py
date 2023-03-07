@@ -223,7 +223,7 @@ def train_multitask(args):
                      cycle(iter(para_train_dataloader)),
                      cycle(iter(sts_train_dataloader))]
     dataset_lengths = [len(sst_train_data), len(para_train_data), len(sts_train_data)] # [8544, 141498, 6040]
-
+    loss_weight = {0: args.weight_sst, 1: args.weight_para, 2: args.weight_sts}
 
     # Init model
     config = {'hidden_dropout_prob': args.hidden_dropout_prob,
@@ -327,7 +327,7 @@ def train_multitask(args):
                 raise ValueError(f"Invalid task_id: {task_id}")
           
             # gradient accumulation
-            loss = loss / args.gradient_accumulation_step
+            loss = loss_weight[task_id] * loss / args.gradient_accumulation_step
             loss.backward()
 
             train_loss[task_id] += loss.item()
@@ -456,6 +456,10 @@ def get_args():
     parser.add_argument("--log_interval", type=int, help="interval for log writer", default=100)
     # multi-task
     parser.add_argument("--sample", help='sample method for multi dataset', type=str, choices=('rr', 'proportional', 'squareroot', 'anneal'), default='rr')
+    parser.add_argument("--weight_sst", help='weight for sst loss', type=float, default=1.0)
+    parser.add_argument("--weight_para", help='weight for para loss', type=float, default=1.0)
+    parser.add_argument("--weight_sts", help='weight for sts loss', type=float, default=1.0)
+    # adaptation modules
     parser.add_argument("--config_path", help='config (.json) file for adaptation modules', type=str, default="")
     # dataset
     parser.add_argument("--concat_pair", action='store_true', help="concat two sequences if True, feed separately if False")
