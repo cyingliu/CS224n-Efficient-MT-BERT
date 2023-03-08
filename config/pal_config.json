@@ -2,6 +2,6 @@
 	"num_tasks": 3,
 	"pal": true,
 	"pal_share": true,
-	"pal_hidden_size": [204, 204, 204],
-	"pal_attn_head": 12
+	"pal_hidden_size": [408, 408, 408],
+	"pal_attn_head": 24
 }
