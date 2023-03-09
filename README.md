@@ -33,7 +33,7 @@ python multitask_classifier.py --option [finetune/pretrain] --use_gpu\
     --gradient_accumulation_step 1\
     --hidden_dropout_prob 0.3\
     --sample [rr, squareroot, anneal]\
-    --config_path CONFIG_PATH
+    --config_path CONFIG_PATH --downstream [single, double]
 ```
 ## Other
 Paper link: https://docs.google.com/spreadsheets/d/1LWrbaXWh6i8SJbvJ5o-TWr5RkVuHSKxputMlH6aMZVQ/edit?usp=sharing. 
