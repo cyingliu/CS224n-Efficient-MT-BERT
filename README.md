@@ -24,7 +24,17 @@ The BERT implementation part of the project was adapted from the "minbert" assig
 created by Shuyan Zhou, Zhengbao Jiang, Ritam Dutt, Brendon Boldt, Aditya Veerubhotla, and Graham Neubig.
 
 Parts of the code are from the [`transformers`](https://github.com/huggingface/transformers) library ([Apache License 2.0](./LICENSE)).
-
+## Usage
+```
+python multitask_classifier.py --option [finetune/pretrain] --use_gpu\
+	  --output_dir OUTPUT_DIR\
+    --epochs 25 --lr 1e-5 --lr_adapt 1e-4 --warmup_portion 0.1\
+    --batch_size 16 --steps_per_epoch 2400 --eval_interval 4\
+    --gradient_accumulation_step 1\
+    --hidden_dropout_prob 0.3\
+    --sample [rr, squareroot, anneal]\
+    --config_path CONFIG_PATH
+```
 ## Other
 Paper link: https://docs.google.com/spreadsheets/d/1LWrbaXWh6i8SJbvJ5o-TWr5RkVuHSKxputMlH6aMZVQ/edit?usp=sharing. 
 
