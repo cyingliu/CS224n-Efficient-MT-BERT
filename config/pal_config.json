@@ -3,5 +3,5 @@
 	"pal": true,
 	"pal_share": true,
 	"pal_hidden_size": [408, 408, 408],
-	"pal_attn_head": 24
+	"pal_attn_head": 6
 }
