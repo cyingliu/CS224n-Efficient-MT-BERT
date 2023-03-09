@@ -85,10 +85,29 @@ class MultitaskBERT(nn.Module):
         ### TODO
         self.concat_pair = config.concat_pair
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        self.sentiment_classifier = nn.Linear(config.hidden_size, config.num_labels)
         n = 1 if self.concat_pair else 2
-        self.paraphrase_classifier = nn.Linear(config.hidden_size * n, 1)
-        self.similarity_classifier = nn.Linear(config.hidden_size * n, 1)
+        if config.downstream == 'single':
+            self.sentiment_classifier = nn.Linear(config.hidden_size, config.num_labels) 
+            self.paraphrase_classifier = nn.Linear(config.hidden_size * n, 1)
+            self.similarity_classifier = nn.Linear(config.hidden_size * n, 1)
+        elif config.downstream == 'double':
+            self.sentiment_classifier = nn.Sequential(
+                nn.Linear(config.hidden_size, config.hidden_size),
+                nn.ReLU(),
+                nn.Linear(config.hidden_size, config.num_labels)
+            )
+            self.paraphrase_classifier = nn.Sequential(
+                nn.Linear(config.hidden_size * n, config.hidden_size),
+                nn.ReLU(),
+                nn.Linear(config.hidden_size, 1)
+            )
+            self.similarity_classifier = nn.Sequential(
+                nn.Linear(config.hidden_size * n, config.hidden_size),
+                nn.ReLU(),
+                nn.Linear(config.hidden_size, 1)
+            )
+        else:
+            raise ValueError(f"Invalid downstream: {config.downstream}")
 
 
     def forward(self, input_ids, attention_mask, task_id=0):
@@ -232,7 +251,8 @@ def train_multitask(args):
               'data_dir': '.',
               'option': args.option,
               'concat_pair': args.concat_pair,
-              'config_path': args.config_path}
+              'config_path': args.config_path,
+              'downstream': args.downstream}
 
     config = SimpleNamespace(**config)
 
@@ -482,7 +502,8 @@ def get_args():
     parser.add_argument("--weight_sst", help='weight for sst loss', type=float, default=1.0)
     parser.add_argument("--weight_para", help='weight for para loss', type=float, default=1.0)
     parser.add_argument("--weight_sts", help='weight for sts loss', type=float, default=1.0)
-    # adaptation modules
+    # model architecture
+    parser.add_argument("--downstream", help="single/double linear downstream classifiers", type=str, choices=('single', 'double'), default='single')
     parser.add_argument("--config_path", help='config (.json) file for adaptation modules', type=str, default="")
     # dataset
     parser.add_argument("--concat_pair", action='store_true', help="concat two sequences if True, feed separately if False")
