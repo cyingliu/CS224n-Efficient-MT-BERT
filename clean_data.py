@@ -1,6 +1,6 @@
 import json
 import random
-"""
+
 # Define the filename
 filename = 'reviews_Kindle_Store_5.json'
 
@@ -23,7 +23,7 @@ with open('new_data.json', 'w') as json_file:
     for row in new_data:
         json.dump(row, json_file)
         json_file.write('\n')
-"""
+
 
 # Open the JSON file for reading
 with open('new_data.json', 'r') as json_file:
@@ -45,41 +45,58 @@ with open('kindle_data_train.txt', 'w') as txt_file:
         values = [str(row[h]).replace('\t', ' ') for h in headers]
         txt_file.write('\t'.join(values) + '\n')
 
-# Open the input file for reading
-with open('kindle_data_train.txt', 'r') as input_file:
+MAX_WORDS = 40
+MAX_ENTRIES = 100000
+num_entries_with_rating = [0, 0, 0, 0, 0, 0]
+with open("kindle_data_train.txt", "r", encoding="utf-8") as infile, \
+     open("kindle_data_train_cleaned.txt", "w", encoding="utf-8") as outfile:
 
-    # Read the header line and get the headers
-    header_line = input_file.readline()
-    headers = header_line.strip().split('\t')
+    # Write headers to output file
+    headers = infile.readline().strip().split("\t")
+    outfile.write("\t".join(headers) + "\n")
 
-    # Read the rest of the lines and store in a list
-    lines = input_file.readlines()
+    # Read and filter entries
+    entries = [line.strip().split("\t") for line in infile.readlines()]
+    random.shuffle(entries)
+    selected_entries = []
+    for entry in entries:
+        review_text = entry[1]
+        num_words = len(review_text.split())
+        if num_words <= MAX_WORDS and num_words > 1:
+            rating = int(float(entry[2]))
+            entry[2] = str(rating)
+            if (num_entries_with_rating[rating] < 20000):
+                selected_entries.append(entry)
+                num_entries_with_rating[rating] += 1
+            if len(selected_entries) >= MAX_ENTRIES:
+                break
 
-# Randomly sample 100,000 lines from the list
-sampled_lines = random.sample(lines, k=100000)
+    # Write selected entries to output file
+    for entry in selected_entries:
+        outfile.write("\t".join(entry) + "\n")
 
-# Open the output file for writing
-with open('kindle_data_train_cleaned.txt', 'w') as output_file:
+with open('kindle_data_train_cleaned.txt', 'r') as f_in, open('kindle_data_train_fixed.txt', 'w') as f_out:
+    headers = f_in.readline().strip().split('\t')
+    f_out.write('\t'.join(headers) + '\n')
+    for line in f_in:
+        cols = line.strip().split('\t')
+        cols[2] = str(int(cols[2]) - 1)
+        f_out.write('\t'.join(cols) + '\n')
 
-    # Write the header line to the output file
-    output_file.write(header_line)
 
-    # Write the sampled lines to the output file
-    for line in sampled_lines:
-        output_file.write(line)
-"""
+# fjoisdajf
+
 import pandas as pd
 
 # read the input file using pandas
-df = pd.read_csv('SICK_train.txt', sep='	', header=0)
+df = pd.read_csv('kindle_data_train_fixed.txt', sep='	', header=0)
 
-#df.insert(0, 'pair_ID_duplicate', df['pair_ID'])
 
 # drop the last columns
-df = df.iloc[:, :-1]
+# df = df.iloc[:, :-1]
 
-df.columns = ['id', 'sentence1', 'sentence2', 'similarity']
+df.columns = ['id', 'sentence', 'similarity']
               
 # write the modified dataframe to a new text file
-df.to_csv('SICK_train_cleaned.txt', sep='	', index=True)
-"""
+df.to_csv('kindle_data_train_fixed.txt', sep='	', index=True)
+
