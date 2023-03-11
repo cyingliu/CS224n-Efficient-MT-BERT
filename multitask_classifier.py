@@ -253,13 +253,23 @@ class MultitaskBERT(nn.Module):
 
         return logits
 
+def reload_checkpoint(checkpoint_path):
+    print(f"Reloading checkpoint from {checkpoint_path}")
+    states = torch.load(checkpoint_path)
+    return states
 
-def save_model(model, optimizer, args, config, filepath):
+def save_model(model, optimizer, scheduler, args, config, filepath, epoch, sst_best_dev_acc, para_best_dev_acc, sts_best_dev_acc, avg_best_dev_acc):
     save_info = {
         'model': model.state_dict(),
         'optim': optimizer.state_dict(),
+        'scheduler': scheduler.state_dict(),
         'args': args,
         'model_config': config,
+        'epoch': epoch,
+        'sst_best_dev_acc': sst_best_dev_acc,
+        'para_best_dev_acc': para_best_dev_acc,
+        'sts_best_dev_acc': sts_best_dev_acc,
+        'avg_best_dev_acc': avg_best_dev_acc,
         'system_rng': random.getstate(),
         'numpy_rng': np.random.get_state(),
         'torch_rng': torch.random.get_rng_state(),
@@ -386,8 +396,27 @@ def train_multitask(args):
     Sqprobs = np.sqrt(dataset_lengths)
     tot = np.sum(Sqprobs)
     Sqprobs = [p/tot for p in Sqprobs]
+
+
+    if args.reload_checkpoint_path:
+        states = reload_checkpoint(args.reload_checkpoint_path)
+        model.load_state_dict(states['model'])
+        optimizer.load_state_dict(states['optim'])
+        scheduler.load_state_dict(states['scheduler'])
+        start_epoch = states['epoch'] + 1
+        sst_best_dev_acc = states['sst_best_dev_acc']
+        para_best_dev_acc = states['para_best_dev_acc']
+        sts_best_dev_acc = states['sst_best_dev_acc']
+        avg_best_dev_acc = states['avg_best_dev_acc']
+        random.setstate(states['system_rng'])
+        np.random.set_state(states['numpy_rng'])
+        torch.random.set_rng_state(states['torch_rng'])
+
+    else:
+        start_epoch = 0
+
     
-    for epoch in range(args.epochs):
+    for epoch in range(start_epoch, args.epochs):
         model.train()
         
         for _ in tqdm(range(steps_per_epoch), desc=f'train-{epoch}', disable=TQDM_DISABLE):
@@ -475,9 +504,10 @@ def train_multitask(args):
         if (epoch + 1) % args.eval_interval == 0:
             para_train_acc, _, _, sst_train_acc, _, _, sts_train_acc, _, _ = model_eval_multitask(sst_train_dataloader, para_train_dataloader, sts_train_dataloader, model, device)
             avg_train_acc = np.mean([para_train_acc, sst_train_acc, sts_train_acc])
+        
         para_dev_acc, _, _, sst_dev_acc, _, _, sts_dev_acc, _, _ = model_eval_multitask(sst_dev_dataloader, para_dev_dataloader, sts_dev_dataloader, model, device)
         avg_dev_acc = np.mean([para_dev_acc, sst_dev_acc, sts_dev_acc])
-   
+        
         if sst_dev_acc > sst_best_dev_acc:
             sst_best_dev_acc = sst_dev_acc
             # save_model(model, optimizer, args, config, os.path.join(args.output_dir, 'best-sst-multi-task-classifier.pt'))
@@ -489,8 +519,8 @@ def train_multitask(args):
             # save_model(model, optimizer, args, config, os.path.join(args.output_dir, 'best-sts-multi-task-classifier.pt'))
         if avg_dev_acc > avg_best_dev_acc:
             avg_best_dev_acc = avg_dev_acc
-            save_model(model, optimizer, args, config, os.path.join(args.output_dir, 'best-avg-multi-task-classifier.pt'))
-        
+            save_model(model, optimizer, scheduler, args, config, os.path.join(args.output_dir, 'best-avg-multi-task-classifier.pt'), epoch, sst_best_dev_acc, para_best_dev_acc, sts_best_dev_acc, avg_best_dev_acc)
+        save_model(model, optimizer, scheduler, args, config, os.path.join(args.output_dir, 'latest-multi-task-classifier.pt'), epoch, sst_best_dev_acc, para_best_dev_acc, sts_best_dev_acc, avg_best_dev_acc)
         
         # log train status
         if (epoch + 1) % args.eval_interval == 0:
@@ -582,6 +612,8 @@ def get_args():
     parser.add_argument("--classification_concat_type", help='concatenaton method for pooled outputs', type=str, choices=('naive', 'add-abs')) # 'naive': (u, v), 'add-abs': (u, v, |u-v|)
     # dataset
     parser.add_argument("--concat_pair", action='store_true', help="concat two sequences if True, feed separately if False")
+    # reload checkpoint
+    parser.add_argument("--reload_checkpoint_path", help='.pt to reload checkpoint', type=str, default="")
     args = parser.parse_args()
     return args
 
