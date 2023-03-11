@@ -27,13 +27,16 @@ Parts of the code are from the [`transformers`](https://github.com/huggingface/t
 ## Usage
 ```
 python multitask_classifier.py --option [finetune/pretrain] --use_gpu\
-	  --output_dir OUTPUT_DIR\
+	--output_dir OUTPUT_DIR\
     --epochs 25 --lr 1e-5 --lr_adapt 1e-4 --warmup_portion 0.1\
     --batch_size 16 --steps_per_epoch 2400 --eval_interval 4\
     --gradient_accumulation_step 1\
-    --hidden_dropout_prob 0.3\
+    --hidden_dropout_prob 0.1\
     --sample [rr, squareroot, anneal]\
-    --config_path CONFIG_PATH --downstream [single, double]
+    --config_path CONFIG_PATH --downstream [single, double]\
+    --similarity_classifier_type ['linear', 'cosine-similarity']\
+    --pooling_type ['cls', 'mean', 'max']\
+    --classification_concat_type ['naive', 'add-abs']
 ```
 ## Other
 Paper link: https://docs.google.com/spreadsheets/d/1LWrbaXWh6i8SJbvJ5o-TWr5RkVuHSKxputMlH6aMZVQ/edit?usp=sharing. 
