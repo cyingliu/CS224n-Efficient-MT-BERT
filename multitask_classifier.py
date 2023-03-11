@@ -74,6 +74,30 @@ class MultitaskBERT(nn.Module):
         else:
             self.bert = BertModel.from_pretrained('bert-base-uncased')
         
+        
+
+        ##### Adaptation Modules #####
+        # Load pretrained layernorm weight/bias for houlsby task-specific layernorm
+
+        if config.config_path and bert_config.houlsby and bert_config.houlsby_add_layernorm:
+            print("Intialize houlsby layer norm")
+            state_dict = self.bert.state_dict()
+            update_state_dict = {}
+            for layer in range(bert_config.num_hidden_layers):
+                weight_0 = state_dict[f'bert_layers.{layer}.attention_layer_norm.weight']
+                bias_0 = state_dict[f'bert_layers.{layer}.attention_layer_norm.bias']
+                weight_1 = state_dict[f'bert_layers.{layer}.out_layer_norm.weight']
+                bias_1 = state_dict[f'bert_layers.{layer}.out_layer_norm.bias']
+                for task in range(bert_config.num_tasks):
+                    update_state_dict[f'bert_layers.{layer}.houlsbys_0.{task}.layernorm.weight'] = weight_0.clone()
+                    update_state_dict[f'bert_layers.{layer}.houlsbys_0.{task}.layernorm.bias'] = bias_0.clone()
+                    update_state_dict[f'bert_layers.{layer}.houlsbys_1.{task}.layernorm.weight'] = weight_1.clone()
+                    update_state_dict[f'bert_layers.{layer}.houlsbys_1.{task}.layernorm.bias'] = bias_1.clone()
+        state_dict.update(update_state_dict)
+        self.bert.load_state_dict(state_dict)
+        self.bert.state_dict()[f'bert_layers.0.houlsbys_0.0.layernorm.weight'] = self.bert.state_dict()[f'bert_layers.0.houlsbys_0.0.layernorm.weight'] + 1
+        
+        ##############################
         for name, param in self.bert.named_parameters():
             if config.option == 'pretrain':
                 if 'pal' in name or 'prefix' in name or 'houlsby' in name:
@@ -376,7 +400,6 @@ def train_multitask(args):
                 optimizer.step()
                 scheduler.step()
                 optimizer.zero_grad()
-
 
             if step % args.log_interval == 0:
                 for task_id in range(3):
