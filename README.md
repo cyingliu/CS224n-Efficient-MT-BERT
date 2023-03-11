@@ -37,6 +37,7 @@ python multitask_classifier.py --option [finetune/pretrain] --use_gpu\
     --similarity_classifier_type ['linear', 'cosine-similarity']\
     --pooling_type ['cls', 'mean', 'max']\
     --classification_concat_type ['naive', 'add-abs']
+    --reload_checkpoint_path CHECKPOINT_PATH
 ```
 ## Other
 Paper link: https://docs.google.com/spreadsheets/d/1LWrbaXWh6i8SJbvJ5o-TWr5RkVuHSKxputMlH6aMZVQ/edit?usp=sharing. 
