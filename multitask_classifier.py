@@ -249,6 +249,7 @@ class MultitaskBERT(nn.Module):
                 logits = self.similarity_classifier(pooled_output)
             else: # 'cosine_similarity'
                 logits = self.similarity_classifier(pooled_output_1, pooled_output_2)
+                logits = (logits + 1) * 5 / 2 # map [-1, 1] to [0, 5]
 
         return logits
 
