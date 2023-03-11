@@ -154,9 +154,9 @@ class BertLayer(nn.Module):
 
     if self.use_houlsby and self.houlsby_add_layernorm:
       if position == 0:
-        outputs = self.houlsbys_0[task_id].layernorm(outputs)
+        outputs = self.houlsbys_0[task_id].layernorm(outputs + inputs)
       else:
-        outputs = self.houlsbys_1[task_id].layernorm(outputs)
+        outputs = self.houlsbys_1[task_id].layernorm(outputs + inputs)
     else: # default or houlsby without add layernorm
       outputs = ln_layer(outputs + inputs)
     ###############################
