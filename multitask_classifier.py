@@ -93,9 +93,8 @@ class MultitaskBERT(nn.Module):
                     update_state_dict[f'bert_layers.{layer}.houlsbys_0.{task}.layernorm.bias'] = bias_0.clone()
                     update_state_dict[f'bert_layers.{layer}.houlsbys_1.{task}.layernorm.weight'] = weight_1.clone()
                     update_state_dict[f'bert_layers.{layer}.houlsbys_1.{task}.layernorm.bias'] = bias_1.clone()
-        state_dict.update(update_state_dict)
-        self.bert.load_state_dict(state_dict)
-        self.bert.state_dict()[f'bert_layers.0.houlsbys_0.0.layernorm.weight'] = self.bert.state_dict()[f'bert_layers.0.houlsbys_0.0.layernorm.weight'] + 1
+            state_dict.update(update_state_dict)
+            self.bert.load_state_dict(state_dict)
         
         ##############################
         for name, param in self.bert.named_parameters():
@@ -106,15 +105,34 @@ class MultitaskBERT(nn.Module):
                     param.requires_grad = False
             elif config.option == 'finetune':
                 param.requires_grad = True
-        ### TODO
+        
         self.concat_pair = config.concat_pair
+        self.similarity_classifier_type = config.similarity_classifier_type
+        self.pooling_type = config.pooling_type
+        self.classification_concat_type = config.classification_concat_type
+
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        n = 1 if self.concat_pair else 2
+
+        if self.concat_pair:
+            n = 1
+        elif self.classification_concat_type == 'add-abs':
+            n = 3
+        else: # 'naive'
+            n = 2
+        
+        if self.concat_pair and self.similarity_classifier_type == 'cosine-simlarity':
+            raise ValueError(f'Invalid training setting, concat_pair: true, similarity_classifier_type: cosine-simlarity')
+        
         if config.downstream == 'single':
             self.sentiment_classifier = nn.Linear(config.hidden_size, config.num_labels) 
             self.paraphrase_classifier = nn.Linear(config.hidden_size * n, 1)
-            self.similarity_classifier = nn.Linear(config.hidden_size * n, 1)
-        elif config.downstream == 'double':
+            if config.similarity_classifier_type == 'linear':
+                self.similarity_classifier = nn.Linear(config.hidden_size * n, 1)
+            else: # 'cosine-similarity'
+                self.similarity_classifier = nn.CosineSimilarity(dim=1, eps=1e-08)
+            
+        
+        else: # 'double':
             self.sentiment_classifier = nn.Sequential(
                 nn.Linear(config.hidden_size, config.hidden_size),
                 nn.ReLU(),
@@ -125,14 +143,31 @@ class MultitaskBERT(nn.Module):
                 nn.ReLU(),
                 nn.Linear(config.hidden_size, 1)
             )
-            self.similarity_classifier = nn.Sequential(
-                nn.Linear(config.hidden_size * n, config.hidden_size),
-                nn.ReLU(),
-                nn.Linear(config.hidden_size, 1)
-            )
-        else:
-            raise ValueError(f"Invalid downstream: {config.downstream}")
+            if config.similarity_classifier_type == 'linear':
+                self.similarity_classifier = nn.Sequential(
+                    nn.Linear(config.hidden_size * n, config.hidden_size),
+                    nn.ReLU(),
+                    nn.Linear(config.hidden_size, 1)
+                )
+            else: # 'cosine-similarity'
+                self.similarity_classifier = nn.CosineSimilarity(dim=1, eps=1e-08)
 
+
+    def pooling(self, sentence_output, pooled_output):
+        if self.pooling_type == 'cls':
+            output = pooled_output
+        elif self.pooling_type == 'mean':
+            output = torch.mean(sentence_output, dim=1)
+        else: # max
+            output, _ = torch.max(sentence_output, dim=1)
+        return output
+
+    def concat_pooled_outputs(self, pooled_output_1, pooled_output_2):
+        if self.classification_concat_type == 'naive':
+            output = torch.cat((pooled_output_1, pooled_output_2), dim=-1)
+        else: # 'add-abs'
+            output = torch.cat((pooled_output_1, pooled_output_2, torch.abs(pooled_output_1 - pooled_output_2)), dim=-1)
+        return output
 
     def forward(self, input_ids, attention_mask, task_id=0):
         # 'Takes a batch of sentences and produces embeddings for them.'
@@ -154,6 +189,7 @@ class MultitaskBERT(nn.Module):
         '''
         ### TODO
         sequence_output, pooled_output = self.forward(input_ids, attention_mask, task_id=0)
+        pooled_output = self.pooling(sequence_output, pooled_output)
         pooled_output = self.dropout(pooled_output)
         logits = self.sentiment_classifier(pooled_output)
 
@@ -170,14 +206,17 @@ class MultitaskBERT(nn.Module):
         ### TODO
         if self.concat_pair:
             sequence_output, pooled_output = self.forward(input_ids_1, attention_mask_1, task_id=1)
+            pooled_output = self.pooling(sequence_output, pooled_output)
             pooled_output = self.dropout(pooled_output)
         
         else:
             sequence_output_1, pooled_output_1 = self.forward(input_ids_1, attention_mask_1, task_id=1)
             sequence_output_2, pooled_output_2 = self.forward(input_ids_2, attention_mask_2, task_id=1)
+            pooled_output_1 = self.pooling(sequence_output_1, pooled_output_1)
+            pooled_output_2 = self.pooling(sequence_output_2, pooled_output_2)
             pooled_output_1 = self.dropout(pooled_output_1)
             pooled_output_2 = self.dropout(pooled_output_2)
-            pooled_output = torch.cat((pooled_output_1, pooled_output_2), dim=-1)
+            pooled_output = self.concat_pooled_outputs(pooled_output_1, pooled_output_2)
         
         logits = self.paraphrase_classifier(pooled_output)
         
@@ -192,18 +231,24 @@ class MultitaskBERT(nn.Module):
         during evaluation, and handled as a logit by the appropriate loss function.
         '''
         ### TODO
-        if self.concat_pair:
+        if self.concat_pair: # self.similarity_classfier_type = 'linear'
             sequence_output, pooled_output = self.forward(input_ids_1, attention_mask_1, task_id=2)
             pooled_output = self.dropout(pooled_output)
-        
+            pooled_output = self.pooling(sequence_output, pooled_output)
+            logits = self.similarity_classifier(pooled_output)
+
         else:
             sequence_output_1, pooled_output_1 = self.forward(input_ids_1, attention_mask_1, task_id=2)
             sequence_output_2, pooled_output_2 = self.forward(input_ids_2, attention_mask_2, task_id=2)
+            pooled_output_1 = self.pooling(sequence_output_1, pooled_output_1)
+            pooled_output_2 = self.pooling(sequence_output_2, pooled_output_2)
             pooled_output_1 = self.dropout(pooled_output_1)
             pooled_output_2 = self.dropout(pooled_output_2)
-            pooled_output = torch.cat((pooled_output_1, pooled_output_2), dim=-1)
-        
-        logits = self.similarity_classifier(pooled_output)
+            if self.similarity_classifier_type == 'linear':
+                pooled_output = self.concat_pooled_outputs(pooled_output_1, pooled_output_2)
+                logits = self.similarity_classifier(pooled_output)
+            else: # 'cosine_similarity'
+                logits = self.similarity_classifier(pooled_output_1, pooled_output_2)
 
         return logits
 
@@ -276,7 +321,10 @@ def train_multitask(args):
               'option': args.option,
               'concat_pair': args.concat_pair,
               'config_path': args.config_path,
-              'downstream': args.downstream}
+              'downstream': args.downstream,
+              'similarity_classifier_type': args.similarity_classifier_type,
+              'pooling_type': args.pooling_type,
+              'classification_concat_type': args.classification_concat_type}
 
     config = SimpleNamespace(**config)
 
@@ -528,6 +576,9 @@ def get_args():
     # model architecture
     parser.add_argument("--downstream", help="single/double linear downstream classifiers", type=str, choices=('single', 'double'), default='single')
     parser.add_argument("--config_path", help='config (.json) file for adaptation modules', type=str, default="")
+    parser.add_argument("--similarity_classifier_type", help='linear/cosine similarity', type=str, choices=('linear', 'cosine-similarity'), default='cosine-simlarity')
+    parser.add_argument("--pooling_type", help='pooling method for bert embeddings', type=str, choices=('cls', 'mean', 'max'), default='mean')
+    parser.add_argument("--classification_concat_type", help='concatenaton method for pooled outputs', type=str, choices=('naive', 'add-abs')) # 'naive': (u, v), 'add-abs': (u, v, |u-v|)
     # dataset
     parser.add_argument("--concat_pair", action='store_true', help="concat two sequences if True, feed separately if False")
     args = parser.parse_args()
