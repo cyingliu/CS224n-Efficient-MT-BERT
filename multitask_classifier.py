@@ -412,6 +412,8 @@ def train_multitask(args):
         np.random.set_state(states['numpy_rng'])
         torch.random.set_rng_state(states['torch_rng'])
 
+        step = args.steps_per_epoch * states['epoch'] + 1
+
     else:
         start_epoch = 0
 
