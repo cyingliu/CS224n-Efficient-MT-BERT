@@ -45,8 +45,8 @@ with open('kindle_data_train.txt', 'w') as txt_file:
         values = [str(row[h]).replace('\t', ' ') for h in headers]
         txt_file.write('\t'.join(values) + '\n')
 
-MAX_WORDS = 40
-MAX_ENTRIES = 100000
+MAX_WORDS = 50
+MAX_ENTRIES = 50000
 num_entries_with_rating = [0, 0, 0, 0, 0, 0]
 with open("kindle_data_train.txt", "r", encoding="utf-8") as infile, \
      open("kindle_data_train_cleaned.txt", "w", encoding="utf-8") as outfile:
@@ -65,7 +65,7 @@ with open("kindle_data_train.txt", "r", encoding="utf-8") as infile, \
         if num_words <= MAX_WORDS and num_words > 1:
             rating = int(float(entry[2]))
             entry[2] = str(rating)
-            if (num_entries_with_rating[rating] < 20000):
+            if (num_entries_with_rating[rating] < 10000):
                 selected_entries.append(entry)
                 num_entries_with_rating[rating] += 1
             if len(selected_entries) >= MAX_ENTRIES:
