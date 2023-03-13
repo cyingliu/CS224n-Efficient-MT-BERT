@@ -74,6 +74,29 @@ class MultitaskBERT(nn.Module):
         else:
             self.bert = BertModel.from_pretrained('bert-base-uncased')
         
+        
+
+        ##### Adaptation Modules #####
+        # Load pretrained layernorm weight/bias for houlsby task-specific layernorm
+
+        if config.config_path and bert_config.houlsby and bert_config.houlsby_add_layernorm:
+            print("Intialize houlsby layer norm")
+            state_dict = self.bert.state_dict()
+            update_state_dict = {}
+            for layer in range(bert_config.num_hidden_layers):
+                weight_0 = state_dict[f'bert_layers.{layer}.attention_layer_norm.weight']
+                bias_0 = state_dict[f'bert_layers.{layer}.attention_layer_norm.bias']
+                weight_1 = state_dict[f'bert_layers.{layer}.out_layer_norm.weight']
+                bias_1 = state_dict[f'bert_layers.{layer}.out_layer_norm.bias']
+                for task in range(bert_config.num_tasks):
+                    update_state_dict[f'bert_layers.{layer}.houlsbys_0.{task}.layernorm.weight'] = weight_0.clone()
+                    update_state_dict[f'bert_layers.{layer}.houlsbys_0.{task}.layernorm.bias'] = bias_0.clone()
+                    update_state_dict[f'bert_layers.{layer}.houlsbys_1.{task}.layernorm.weight'] = weight_1.clone()
+                    update_state_dict[f'bert_layers.{layer}.houlsbys_1.{task}.layernorm.bias'] = bias_1.clone()
+            state_dict.update(update_state_dict)
+            self.bert.load_state_dict(state_dict)
+        
+        ##############################
         for name, param in self.bert.named_parameters():
             if config.option == 'pretrain':
                 if 'pal' in name or 'prefix' in name or 'houlsby' in name:
@@ -82,28 +105,69 @@ class MultitaskBERT(nn.Module):
                     param.requires_grad = False
             elif config.option == 'finetune':
                 param.requires_grad = True
-        ### TODO
+        
         self.concat_pair = config.concat_pair
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        self.sentiment_classifier = nn.Sequential(
-            nn.Linear(config.hidden_size, config.hidden_size),
-            nn.ReLU(),
-            nn.Linear(config.hidden_size, config.num_labels)
-        )
-        n = 1 if self.concat_pair else 2
-        #self.paraphrase_classifier = nn.Linear(config.hidden_size * n, 1)
-        self.paraphrase_classifier = nn.Sequential(
-            nn.Linear(config.hidden_size * n, config.hidden_size),
-            nn.ReLU(),
-            nn.Linear(config.hidden_size, 1)
-        )
-        #self.similarity_classifier = nn.Linear(config.hidden_size * n, 1)
-        self.similarity_classifier = nn.Sequential(
-            nn.Linear(config.hidden_size * n, config.hidden_size),
-            nn.ReLU(),
-            nn.Linear(config.hidden_size, 1)
-        )
+        self.similarity_classifier_type = config.similarity_classifier_type
+        self.pooling_type = config.pooling_type
+        self.classification_concat_type = config.classification_concat_type
 
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+
+        if self.concat_pair:
+            n = 1
+        elif self.classification_concat_type == 'add-abs':
+            n = 3
+        else: # 'naive'
+            n = 2
+        
+        if self.concat_pair and self.similarity_classifier_type == 'cosine-simlarity':
+            raise ValueError(f'Invalid training setting, concat_pair: true, similarity_classifier_type: cosine-simlarity')
+        
+        if config.downstream == 'single':
+            self.sentiment_classifier = nn.Linear(config.hidden_size, config.num_labels) 
+            self.paraphrase_classifier = nn.Linear(config.hidden_size * n, 1)
+            if config.similarity_classifier_type == 'linear':
+                self.similarity_classifier = nn.Linear(config.hidden_size * n, 1)
+            else: # 'cosine-similarity'
+                self.similarity_classifier = nn.CosineSimilarity(dim=1, eps=1e-08)
+            
+        
+        else: # 'double':
+            self.sentiment_classifier = nn.Sequential(
+                nn.Linear(config.hidden_size, config.hidden_size),
+                nn.ReLU(),
+                nn.Linear(config.hidden_size, config.num_labels)
+            )
+            self.paraphrase_classifier = nn.Sequential(
+                nn.Linear(config.hidden_size * n, config.hidden_size),
+                nn.ReLU(),
+                nn.Linear(config.hidden_size, 1)
+            )
+            if config.similarity_classifier_type == 'linear':
+                self.similarity_classifier = nn.Sequential(
+                    nn.Linear(config.hidden_size * n, config.hidden_size),
+                    nn.ReLU(),
+                    nn.Linear(config.hidden_size, 1)
+                )
+            else: # 'cosine-similarity'
+                self.similarity_classifier = nn.CosineSimilarity(dim=1, eps=1e-08)
+
+
+    def pooling(self, sentence_output, pooled_output):
+        if self.pooling_type == 'cls':
+            output = pooled_output
+        elif self.pooling_type == 'mean':
+            output = torch.mean(sentence_output, dim=1)
+        else: # max
+            output, _ = torch.max(sentence_output, dim=1)
+        return output
+
+    def concat_pooled_outputs(self, pooled_output_1, pooled_output_2):
+        if self.classification_concat_type == 'naive':
+            output = torch.cat((pooled_output_1, pooled_output_2), dim=-1)
+        else: # 'add-abs'
+            output = torch.cat((pooled_output_1, pooled_output_2, torch.abs(pooled_output_1 - pooled_output_2)), dim=-1)
+        return output
 
     def forward(self, input_ids, attention_mask, task_id=0):
         # 'Takes a batch of sentences and produces embeddings for them.'
@@ -125,6 +189,7 @@ class MultitaskBERT(nn.Module):
         '''
         ### TODO
         sequence_output, pooled_output = self.forward(input_ids, attention_mask, task_id=0)
+        pooled_output = self.pooling(sequence_output, pooled_output)
         pooled_output = self.dropout(pooled_output)
         logits = self.sentiment_classifier(pooled_output)
 
@@ -141,14 +206,17 @@ class MultitaskBERT(nn.Module):
         ### TODO
         if self.concat_pair:
             sequence_output, pooled_output = self.forward(input_ids_1, attention_mask_1, task_id=1)
+            pooled_output = self.pooling(sequence_output, pooled_output)
             pooled_output = self.dropout(pooled_output)
         
         else:
             sequence_output_1, pooled_output_1 = self.forward(input_ids_1, attention_mask_1, task_id=1)
             sequence_output_2, pooled_output_2 = self.forward(input_ids_2, attention_mask_2, task_id=1)
+            pooled_output_1 = self.pooling(sequence_output_1, pooled_output_1)
+            pooled_output_2 = self.pooling(sequence_output_2, pooled_output_2)
             pooled_output_1 = self.dropout(pooled_output_1)
             pooled_output_2 = self.dropout(pooled_output_2)
-            pooled_output = torch.cat((pooled_output_1, pooled_output_2), dim=-1)
+            pooled_output = self.concat_pooled_outputs(pooled_output_1, pooled_output_2)
         
         logits = self.paraphrase_classifier(pooled_output)
         
@@ -163,28 +231,45 @@ class MultitaskBERT(nn.Module):
         during evaluation, and handled as a logit by the appropriate loss function.
         '''
         ### TODO
-        if self.concat_pair:
+        if self.concat_pair: # self.similarity_classfier_type = 'linear'
             sequence_output, pooled_output = self.forward(input_ids_1, attention_mask_1, task_id=2)
             pooled_output = self.dropout(pooled_output)
-        
+            pooled_output = self.pooling(sequence_output, pooled_output)
+            logits = self.similarity_classifier(pooled_output)
+
         else:
             sequence_output_1, pooled_output_1 = self.forward(input_ids_1, attention_mask_1, task_id=2)
             sequence_output_2, pooled_output_2 = self.forward(input_ids_2, attention_mask_2, task_id=2)
+            pooled_output_1 = self.pooling(sequence_output_1, pooled_output_1)
+            pooled_output_2 = self.pooling(sequence_output_2, pooled_output_2)
             pooled_output_1 = self.dropout(pooled_output_1)
             pooled_output_2 = self.dropout(pooled_output_2)
-            pooled_output = torch.cat((pooled_output_1, pooled_output_2), dim=-1)
-        
-        logits = self.similarity_classifier(pooled_output)
+            if self.similarity_classifier_type == 'linear':
+                pooled_output = self.concat_pooled_outputs(pooled_output_1, pooled_output_2)
+                logits = self.similarity_classifier(pooled_output)
+            else: # 'cosine_similarity'
+                logits = self.similarity_classifier(pooled_output_1, pooled_output_2)
+                logits = (logits + 1) * 5 / 2 # map [-1, 1] to [0, 5]
 
         return logits
 
+def reload_checkpoint(checkpoint_path):
+    print(f"Reloading checkpoint from {checkpoint_path}")
+    states = torch.load(checkpoint_path)
+    return states
 
-def save_model(model, optimizer, args, config, filepath):
+def save_model(model, optimizer, scheduler, args, config, filepath, epoch, sst_best_dev_acc, para_best_dev_acc, sts_best_dev_acc, avg_best_dev_acc):
     save_info = {
         'model': model.state_dict(),
         'optim': optimizer.state_dict(),
+        'scheduler': scheduler.state_dict(),
         'args': args,
         'model_config': config,
+        'epoch': epoch,
+        'sst_best_dev_acc': sst_best_dev_acc,
+        'para_best_dev_acc': para_best_dev_acc,
+        'sts_best_dev_acc': sts_best_dev_acc,
+        'avg_best_dev_acc': avg_best_dev_acc,
         'system_rng': random.getstate(),
         'numpy_rng': np.random.get_state(),
         'torch_rng': torch.random.get_rng_state(),
@@ -246,7 +331,11 @@ def train_multitask(args):
               'data_dir': '.',
               'option': args.option,
               'concat_pair': args.concat_pair,
-              'config_path': args.config_path}
+              'config_path': args.config_path,
+              'downstream': args.downstream,
+              'similarity_classifier_type': args.similarity_classifier_type,
+              'pooling_type': args.pooling_type,
+              'classification_concat_type': args.classification_concat_type}
 
     config = SimpleNamespace(**config)
 
@@ -307,8 +396,29 @@ def train_multitask(args):
     Sqprobs = np.sqrt(dataset_lengths)
     tot = np.sum(Sqprobs)
     Sqprobs = [p/tot for p in Sqprobs]
+
+
+    if args.reload_checkpoint_path:
+        states = reload_checkpoint(args.reload_checkpoint_path)
+        model.load_state_dict(states['model'])
+        optimizer.load_state_dict(states['optim'])
+        scheduler.load_state_dict(states['scheduler'])
+        start_epoch = states['epoch'] + 1
+        sst_best_dev_acc = states['sst_best_dev_acc']
+        para_best_dev_acc = states['para_best_dev_acc']
+        sts_best_dev_acc = states['sst_best_dev_acc']
+        avg_best_dev_acc = states['avg_best_dev_acc']
+        random.setstate(states['system_rng'])
+        np.random.set_state(states['numpy_rng'])
+        torch.random.set_rng_state(states['torch_rng'])
+
+        step = args.steps_per_epoch * states['epoch'] + 1
+
+    else:
+        start_epoch = 0
+
     
-    for epoch in range(args.epochs):
+    for epoch in range(start_epoch, args.epochs):
         model.train()
         
         for _ in tqdm(range(steps_per_epoch), desc=f'train-{epoch}', disable=TQDM_DISABLE):
@@ -371,7 +481,6 @@ def train_multitask(args):
                 scheduler.step()
                 optimizer.zero_grad()
 
-
             if step % args.log_interval == 0:
                 for task_id in range(3):
                     if num_batches[task_id] == 0:
@@ -397,22 +506,23 @@ def train_multitask(args):
         if (epoch + 1) % args.eval_interval == 0:
             para_train_acc, _, _, sst_train_acc, _, _, sts_train_acc, _, _ = model_eval_multitask(sst_train_dataloader, para_train_dataloader, sts_train_dataloader, model, device)
             avg_train_acc = np.mean([para_train_acc, sst_train_acc, sts_train_acc])
+        
         para_dev_acc, _, _, sst_dev_acc, _, _, sts_dev_acc, _, _ = model_eval_multitask(sst_dev_dataloader, para_dev_dataloader, sts_dev_dataloader, model, device)
         avg_dev_acc = np.mean([para_dev_acc, sst_dev_acc, sts_dev_acc])
-   
+        
         if sst_dev_acc > sst_best_dev_acc:
             sst_best_dev_acc = sst_dev_acc
-            save_model(model, optimizer, args, config, os.path.join(args.output_dir, 'best-sst-multi-task-classifier.pt'))
+            # save_model(model, optimizer, args, config, os.path.join(args.output_dir, 'best-sst-multi-task-classifier.pt'))
         if para_dev_acc > para_best_dev_acc:
             para_best_dev_acc = para_dev_acc
-            save_model(model, optimizer, args, config, os.path.join(args.output_dir, 'best-para-multi-task-classifier.pt'))
+            # save_model(model, optimizer, args, config, os.path.join(args.output_dir, 'best-para-multi-task-classifier.pt'))
         if sts_dev_acc > sts_best_dev_acc:
             sts_best_dev_acc = sts_dev_acc
-            save_model(model, optimizer, args, config, os.path.join(args.output_dir, 'best-sts-multi-task-classifier.pt'))
+            # save_model(model, optimizer, args, config, os.path.join(args.output_dir, 'best-sts-multi-task-classifier.pt'))
         if avg_dev_acc > avg_best_dev_acc:
             avg_best_dev_acc = avg_dev_acc
-            save_model(model, optimizer, args, config, os.path.join(args.output_dir, 'best-avg-multi-task-classifier.pt'))
-        
+            save_model(model, optimizer, scheduler, args, config, os.path.join(args.output_dir, 'best-avg-multi-task-classifier.pt'), epoch, sst_best_dev_acc, para_best_dev_acc, sts_best_dev_acc, avg_best_dev_acc)
+        save_model(model, optimizer, scheduler, args, config, os.path.join(args.output_dir, 'latest-multi-task-classifier.pt'), epoch, sst_best_dev_acc, para_best_dev_acc, sts_best_dev_acc, avg_best_dev_acc)
         
         # log train status
         if (epoch + 1) % args.eval_interval == 0:
@@ -496,10 +606,16 @@ def get_args():
     parser.add_argument("--weight_sst", help='weight for sst loss', type=float, default=1.0)
     parser.add_argument("--weight_para", help='weight for para loss', type=float, default=1.0)
     parser.add_argument("--weight_sts", help='weight for sts loss', type=float, default=1.0)
-    # adaptation modules
+    # model architecture
+    parser.add_argument("--downstream", help="single/double linear downstream classifiers", type=str, choices=('single', 'double'), default='single')
     parser.add_argument("--config_path", help='config (.json) file for adaptation modules', type=str, default="")
+    parser.add_argument("--similarity_classifier_type", help='linear/cosine similarity', type=str, choices=('linear', 'cosine-similarity'), default='cosine-simlarity')
+    parser.add_argument("--pooling_type", help='pooling method for bert embeddings', type=str, choices=('cls', 'mean', 'max'), default='mean')
+    parser.add_argument("--classification_concat_type", help='concatenaton method for pooled outputs', type=str, choices=('naive', 'add-abs')) # 'naive': (u, v), 'add-abs': (u, v, |u-v|)
     # dataset
     parser.add_argument("--concat_pair", action='store_true', help="concat two sequences if True, feed separately if False")
+    # reload checkpoint
+    parser.add_argument("--reload_checkpoint_path", help='.pt to reload checkpoint', type=str, default="")
     args = parser.parse_args()
     return args
 
