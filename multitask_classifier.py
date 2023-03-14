@@ -611,7 +611,7 @@ def get_args():
     parser.add_argument("--config_path", help='config (.json) file for adaptation modules', type=str, default="")
     parser.add_argument("--similarity_classifier_type", help='linear/cosine similarity', type=str, choices=('linear', 'cosine-similarity'), default='cosine-simlarity')
     parser.add_argument("--pooling_type", help='pooling method for bert embeddings', type=str, choices=('cls', 'mean', 'max'), default='mean')
-    parser.add_argument("--classification_concat_type", help='concatenaton method for pooled outputs', type=str, choices=('naive', 'add-abs')) # 'naive': (u, v), 'add-abs': (u, v, |u-v|)
+    parser.add_argument("--classification_concat_type", help='concatenaton method for pooled outputs', type=str, choices=('naive', 'add-abs'), default='add-abs') # 'naive': (u, v), 'add-abs': (u, v, |u-v|)
     # dataset
     parser.add_argument("--concat_pair", action='store_true', help="concat two sequences if True, feed separately if False")
     # reload checkpoint
