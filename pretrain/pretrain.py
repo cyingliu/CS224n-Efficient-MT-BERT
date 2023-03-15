@@ -5,7 +5,7 @@ import argparse
 from tokenizer import BertTokenizer
 from bert import BertModel
 from datasets import load_dataset # hugging face
-from transformers import DataCollatorForLanguageModeling, TrainingArguments
+from transformers import DataCollatorForLanguageModeling, TrainingArguments, Trainer
 
 def tokenize_function(examples):
     result = tokenizer(examples["text"])
