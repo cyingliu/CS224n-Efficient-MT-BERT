@@ -1,5 +1,6 @@
 # Reference: https://huggingface.co/course/chapter7/3?fw=pt
 import os, sys
+import math
 sys.path.append('..')
 import argparse
 from tokenizer import BertTokenizer
