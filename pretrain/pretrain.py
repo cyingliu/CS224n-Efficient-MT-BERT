@@ -34,7 +34,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--train_data_path', default='./data/sst-quora-sts-pretrain-train.csv')
     parser.add_argument('--test_data_path', default='./data/sst-quora-sts-pretrain-test.csv') 
-    parser.add_argument('--output_dir', require=True)
+    parser.add_argument('--output_dir', required=True)
     args = parser.parse_args()
 
 
