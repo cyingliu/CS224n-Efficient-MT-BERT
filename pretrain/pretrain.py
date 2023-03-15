@@ -6,6 +6,7 @@ from tokenizer import BertTokenizer
 from bert import BertModel
 from datasets import load_dataset # hugging face
 from transformers import DataCollatorForLanguageModeling, TrainingArguments, Trainer
+from transformers import BertForMaskedLM
 
 def tokenize_function(examples):
     result = tokenizer(examples["text"])
@@ -37,8 +38,8 @@ if __name__ == "__main__":
     parser.add_argument('--output_dir', required=True)
     args = parser.parse_args()
 
+    model = BertForMaskedLM.from_pretrained('bert-base-uncased')
 
-    model = BertModel.from_pretrained('bert-base-uncased')
     tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
     
     # load train, test dataset texts
