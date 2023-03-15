@@ -18,10 +18,11 @@ from datasets_custom import SentencePairDataset_custom, SentencePairTestDataset_
 
 from evaluation import model_eval_sst, test_model_multitask, model_eval_multitask
 
+from pretrain.pretrain_utils import load_pretrained_weight_from_lm
+
 from itertools import cycle
 import yaml
 import json
-from tokenizer import BertTokenizer
 
 
 TQDM_DISABLE=False
@@ -69,11 +70,24 @@ class MultitaskBERT(nn.Module):
         if config.config_path: # extra config for adaptation modules
             with open(config.config_path) as f:
                 _config = json.load(f)
-            bert_config = BertConfig.from_pretrained('bert-base-uncased', **_config)
-            self.bert = BertModel.from_pretrained('bert-base-uncased', config=bert_config)
-        else:
-            self.bert = BertModel.from_pretrained('bert-base-uncased')
+                bert_config = BertConfig.from_pretrained('bert-base-uncased', **_config)
+            
+            if config.pretrained_path:
+                bert_config.name_or_path = 'from_scratch'
+                self.bert = BertModel(bert_config)
+                load_pretrained_weight_from_lm(self.bert, config.pretrained_path)
+            else:
+                self.bert = BertModel.from_pretrained('bert-base-uncased', config=bert_config)
         
+        else:
+            if config.pretrained_path:
+                bert_config = BertConfig.from_pretrained('bert-base-uncased')
+                bert_config.name_or_path = "from_scratch"
+                self.bert = BertModel(bert_config)
+                load_pretrained_weight_from_lm(self.bert, config.pretrained_path)
+            
+            else:
+                self.bert = BertModel.from_pretrained('bert-base-uncased')
         
 
         ##### Adaptation Modules #####
@@ -335,7 +349,8 @@ def train_multitask(args):
               'downstream': args.downstream,
               'similarity_classifier_type': args.similarity_classifier_type,
               'pooling_type': args.pooling_type,
-              'classification_concat_type': args.classification_concat_type}
+              'classification_concat_type': args.classification_concat_type,
+              'pretrained_path': args.pretrained_path}
 
     config = SimpleNamespace(**config)
 
@@ -614,6 +629,8 @@ def get_args():
     parser.add_argument("--classification_concat_type", help='concatenaton method for pooled outputs', type=str, choices=('naive', 'add-abs'), default='add-abs') # 'naive': (u, v), 'add-abs': (u, v, |u-v|)
     # dataset
     parser.add_argument("--concat_pair", action='store_true', help="concat two sequences if True, feed separately if False")
+    # pretrained weight
+    parser.add_argument("--pretrained_path", help='pretrained weight (.bin) path', default="")
     # reload checkpoint
     parser.add_argument("--reload_checkpoint_path", help='.pt to reload checkpoint', type=str, default="")
     args = parser.parse_args()

@@ -1,4 +1,6 @@
 __pycache__/*
+pretrain/__pycache__/*
 *.pt
+*.bin
 result/tmp/*
 scripts/*
