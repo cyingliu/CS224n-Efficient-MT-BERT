@@ -42,7 +42,7 @@ if __name__ == "__main__":
     tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
     
     # load train, test dataset texts
-    dataset = load_dataset("csv", data_files={'train': args.train_data_path, 'test': args.test_data_path}, delimiter='\t') # 'text'
+    dataset = load_dataset("csv", data_files={'train': args.train_data_path, 'test': args.test_data_path}, delimiter='\t\t') # 'text', contains \theta, \times...
 
     # tokenize text
     tokenized_datasets = dataset.map(tokenize_function, batched=True, remove_columns=["text"]) # 'input_ids', 'token_type_ids', 'attention_mask'
