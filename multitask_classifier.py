@@ -428,7 +428,7 @@ def train_multitask(args):
 
 
     if args.second_stage_path:
-        states = reload_checkpoint(args.second_checkpoint_path)
+        states = reload_checkpoint(args.second_stage_path)
         model.load_state_dict(states['model'])
 
     if args.reload_checkpoint_path:
