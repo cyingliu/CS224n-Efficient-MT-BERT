@@ -275,9 +275,13 @@ def reload_checkpoint(checkpoint_path):
     return states
 
 def save_model(model, optimizer, scheduler, args, config, filepath, epoch, sst_best_dev_acc, para_best_dev_acc, sts_best_dev_acc, avg_best_dev_acc):
+    if args.pcgrad:
+        optimizer_state_dict = optimizer._optim.state_dict()
+    else:
+        optimizer_state_dict = optimizer.state_dict()
     save_info = {
         'model': model.state_dict(),
-        'optim': optimizer.state_dict(),
+        'optim': optimizer_state_dict,
         'scheduler': scheduler.state_dict(),
         'args': args,
         'model_config': config,
@@ -430,7 +434,10 @@ def train_multitask(args):
     if args.reload_checkpoint_path:
         states = reload_checkpoint(args.reload_checkpoint_path)
         model.load_state_dict(states['model'])
-        optimizer.load_state_dict(states['optim'])
+        if args.pcgrad:
+            optimizer._optim.load_state_dict(states['optim'])
+        else:
+            optimizer.load_state_dict(states['optim'])
         scheduler.load_state_dict(states['scheduler'])
         start_epoch = states['epoch'] + 1
         sst_best_dev_acc = states['sst_best_dev_acc']
