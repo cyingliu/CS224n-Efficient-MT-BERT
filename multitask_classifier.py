@@ -19,6 +19,7 @@ from datasets_custom import SentencePairDataset_custom, SentencePairTestDataset_
 from evaluation import model_eval_sst, test_model_multitask, model_eval_multitask
 
 from pretrain.pretrain_utils import load_pretrained_weight_from_lm
+from pcgrad import PCGrad
 
 from itertools import cycle
 import yaml
@@ -123,6 +124,7 @@ class MultitaskBERT(nn.Module):
         self.concat_pair = config.concat_pair
         self.similarity_classifier_type = config.similarity_classifier_type
         self.pooling_type = config.pooling_type
+        self.sentiment_pooling_type = config.sentiment_pooling_type
         self.classification_concat_type = config.classification_concat_type
 
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
@@ -167,10 +169,10 @@ class MultitaskBERT(nn.Module):
                 self.similarity_classifier = nn.CosineSimilarity(dim=1, eps=1e-08)
 
 
-    def pooling(self, sentence_output, pooled_output):
-        if self.pooling_type == 'cls':
+    def pooling(self, pooling_type, sentence_output, pooled_output):
+        if pooling_type == 'cls':
             output = pooled_output
-        elif self.pooling_type == 'mean':
+        elif pooling_type == 'mean':
             output = torch.mean(sentence_output, dim=1)
         else: # max
             output, _ = torch.max(sentence_output, dim=1)
@@ -203,7 +205,7 @@ class MultitaskBERT(nn.Module):
         '''
         ### TODO
         sequence_output, pooled_output = self.forward(input_ids, attention_mask, task_id=0)
-        pooled_output = self.pooling(sequence_output, pooled_output)
+        pooled_output = self.pooling(self.sentiment_pooling_type, sequence_output, pooled_output)
         pooled_output = self.dropout(pooled_output)
         logits = self.sentiment_classifier(pooled_output)
 
@@ -220,14 +222,14 @@ class MultitaskBERT(nn.Module):
         ### TODO
         if self.concat_pair:
             sequence_output, pooled_output = self.forward(input_ids_1, attention_mask_1, task_id=1)
-            pooled_output = self.pooling(sequence_output, pooled_output)
+            pooled_output = self.pooling(self.pooling_type, sequence_output, pooled_output)
             pooled_output = self.dropout(pooled_output)
         
         else:
             sequence_output_1, pooled_output_1 = self.forward(input_ids_1, attention_mask_1, task_id=1)
             sequence_output_2, pooled_output_2 = self.forward(input_ids_2, attention_mask_2, task_id=1)
-            pooled_output_1 = self.pooling(sequence_output_1, pooled_output_1)
-            pooled_output_2 = self.pooling(sequence_output_2, pooled_output_2)
+            pooled_output_1 = self.pooling(self.pooling_type, sequence_output_1, pooled_output_1)
+            pooled_output_2 = self.pooling(self.pooling_type, sequence_output_2, pooled_output_2)
             pooled_output_1 = self.dropout(pooled_output_1)
             pooled_output_2 = self.dropout(pooled_output_2)
             pooled_output = self.concat_pooled_outputs(pooled_output_1, pooled_output_2)
@@ -248,14 +250,14 @@ class MultitaskBERT(nn.Module):
         if self.concat_pair: # self.similarity_classfier_type = 'linear'
             sequence_output, pooled_output = self.forward(input_ids_1, attention_mask_1, task_id=2)
             pooled_output = self.dropout(pooled_output)
-            pooled_output = self.pooling(sequence_output, pooled_output)
+            pooled_output = self.pooling(self.pooling_type, sequence_output, pooled_output)
             logits = self.similarity_classifier(pooled_output)
 
         else:
             sequence_output_1, pooled_output_1 = self.forward(input_ids_1, attention_mask_1, task_id=2)
             sequence_output_2, pooled_output_2 = self.forward(input_ids_2, attention_mask_2, task_id=2)
-            pooled_output_1 = self.pooling(sequence_output_1, pooled_output_1)
-            pooled_output_2 = self.pooling(sequence_output_2, pooled_output_2)
+            pooled_output_1 = self.pooling(self.pooling_type, sequence_output_1, pooled_output_1)
+            pooled_output_2 = self.pooling(self.pooling_type, sequence_output_2, pooled_output_2)
             pooled_output_1 = self.dropout(pooled_output_1)
             pooled_output_2 = self.dropout(pooled_output_2)
             if self.similarity_classifier_type == 'linear':
@@ -349,6 +351,7 @@ def train_multitask(args):
               'downstream': args.downstream,
               'similarity_classifier_type': args.similarity_classifier_type,
               'pooling_type': args.pooling_type,
+              'sentiment_pooling_type': args.sentiment_pooling_type,
               'classification_concat_type': args.classification_concat_type,
               'pretrained_path': args.pretrained_path}
 
@@ -372,7 +375,9 @@ def train_multitask(args):
         else:
             backbone_params.append(param)
     optimizer = AdamW([{'params': adaptation_params, 'lr': args.lr_adapt}, {'params': backbone_params}], lr=lr)
-    
+    if args.pcgrad:
+        optimizer = PCGrad(optimizer)
+
     total_steps = args.epochs * args.steps_per_epoch
     warmup_steps = int(total_steps * args.warmup_portion)
     def warmup(current_step: int):
@@ -380,7 +385,12 @@ def train_multitask(args):
             return float(current_step / warmup_steps)
         else:                                 # (num_training_steps - current_step) / (num_training_steps - warmup_steps) * base_lr
             return max(0.0, float(total_steps - current_step) / float(max(1, total_steps - warmup_steps)))
-    scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=warmup)
+    if args.pcgrad:
+        scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer._optim, lr_lambda=warmup)
+    else:
+        scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=warmup)
+    
+
     #####################
     sst_best_dev_acc = 0
     para_best_dev_acc = 0
@@ -413,6 +423,10 @@ def train_multitask(args):
     Sqprobs = [p/tot for p in Sqprobs]
 
 
+    if args.second_stage_path:
+        states = reload_checkpoint(args.second_checkpoint_path)
+        model.load_state_dict(states['model'])
+
     if args.reload_checkpoint_path:
         states = reload_checkpoint(args.reload_checkpoint_path)
         model.load_state_dict(states['model'])
@@ -432,12 +446,12 @@ def train_multitask(args):
     else:
         start_epoch = 0
 
-    
+    losses = [] # loss buffer for pcgrad
     for epoch in range(start_epoch, args.epochs):
         model.train()
         
         for _ in tqdm(range(steps_per_epoch), desc=f'train-{epoch}', disable=TQDM_DISABLE):
-            if args.sample == 'rr':
+            if args.sample == 'rr' or args.pcgrad:
                 task_id = (task_id + 1) % 3
             elif args.sample == "proportional":
                 probs = Nprobs
@@ -483,15 +497,28 @@ def train_multitask(args):
             else:
                 raise ValueError(f"Invalid task_id: {task_id}")
           
-            # gradient accumulation
-            loss = loss_weight[task_id] * loss / args.gradient_accumulation_step
-            loss.backward()
+            loss = loss_weight[task_id] * loss
+            if args.pcgrad:
+                losses.append(loss)
+            else:
+                # gradient accumulation 
+                loss /= args.gradient_accumulation_step
+                loss.backward()
 
             train_loss[task_id] += loss.item()
             num_batches[task_id] += 1
 
             
-            if (step + 1) % args.gradient_accumulation_step == 0:
+            if args.pcgrad:
+                if step % 3 == 0:
+                    assert len(losses) == 3
+                    optimizer.pc_backward(losses) # calculate the gradient can apply gradient modification
+                    optimizer.step()  # apply gradient step
+                    scheduler.step()
+                    optimizer.zero_grad()
+                    losses = []
+            
+            elif step % args.gradient_accumulation_step == 0:
                 optimizer.step()
                 scheduler.step()
                 optimizer.zero_grad()
@@ -617,6 +644,7 @@ def get_args():
                         default="result/tmp")
     parser.add_argument("--log_interval", type=int, help="interval for log writer", default=100)
     # multi-task
+    parser.add_argument("--pcgrad", action='store_true', help='update three tasks loss with gradient surgery at a time')
     parser.add_argument("--sample", help='sample method for multi dataset', type=str, choices=('rr', 'proportional', 'squareroot', 'anneal'), default='rr')
     parser.add_argument("--weight_sst", help='weight for sst loss', type=float, default=1.0)
     parser.add_argument("--weight_para", help='weight for para loss', type=float, default=1.0)
@@ -625,6 +653,7 @@ def get_args():
     parser.add_argument("--downstream", help="single/double linear downstream classifiers", type=str, choices=('single', 'double'), default='single')
     parser.add_argument("--config_path", help='config (.json) file for adaptation modules', type=str, default="")
     parser.add_argument("--similarity_classifier_type", help='linear/cosine similarity', type=str, choices=('linear', 'cosine-similarity'), default='cosine-simlarity')
+    parser.add_argument("--sentiment_pooling_type", help='pooling method for bert embedding, for sentiment class, overide --pooling_type', choices=('cls', 'mean', 'max'), default='mean')
     parser.add_argument("--pooling_type", help='pooling method for bert embeddings', type=str, choices=('cls', 'mean', 'max'), default='mean')
     parser.add_argument("--classification_concat_type", help='concatenaton method for pooled outputs', type=str, choices=('naive', 'add-abs'), default='add-abs') # 'naive': (u, v), 'add-abs': (u, v, |u-v|)
     # dataset
@@ -633,6 +662,8 @@ def get_args():
     parser.add_argument("--pretrained_path", help='pretrained weight (.bin) path', default="")
     # reload checkpoint
     parser.add_argument("--reload_checkpoint_path", help='.pt to reload checkpoint', type=str, default="")
+    # 2nd stage tuning
+    parser.add_argument("--second_stage_path", help='.pt to reload checkpoint for 2nd stage training', type=str, default="")
     args = parser.parse_args()
     return args
 
