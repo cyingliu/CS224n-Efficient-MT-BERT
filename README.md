@@ -32,14 +32,20 @@ python multitask_classifier.py --option [finetune/pretrain] --use_gpu\
     --batch_size 16 --steps_per_epoch 2400 --eval_interval 4\
     --gradient_accumulation_step 1\
     --hidden_dropout_prob 0.1\
+    --pcgrad\
     --sample [rr, squareroot, anneal]\
     --config_path CONFIG_PATH --downstream [single, double]\
     --similarity_classifier_type ['linear', 'cosine-similarity']\
+    --sentiment_pooling_type ['cls', 'mean', 'max']\
     --pooling_type ['cls', 'mean', 'max']\
     --classification_concat_type ['naive', 'add-abs']
     --reload_checkpoint_path CHECKPOINT_PATH\
-    --pretrained_path PRETRAINED_PATH
+    --pretrained_path PRETRAINED_PATH\
+    --second_stage_path FINETUNED_PATH
+    
 ```
+- ```--sentiment_pooling_type```: sentiment head, default: mean, ```--pooling_type```: paraphrase, semantic heads, default: mean
+- ```--pcgrad``` will overide sampling method, gradient accumulation. Update three tasks losses with gradient surgery together.
 ## Other
 Paper link: https://docs.google.com/spreadsheets/d/1LWrbaXWh6i8SJbvJ5o-TWr5RkVuHSKxputMlH6aMZVQ/edit?usp=sharing. 
 
