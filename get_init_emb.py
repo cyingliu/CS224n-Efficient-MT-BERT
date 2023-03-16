@@ -36,7 +36,9 @@ if __name__ == "__main__":
               'downstream': args.downstream,
               'similarity_classifier_type': args.similarity_classifier_type,
               'pooling_type': args.pooling_type,
-              'classification_concat_type': args.classification_concat_type}
+              'sentiment_pooling_type': args.sentiment_pooling_type,
+              'classification_concat_type': args.classification_concat_type,
+              'pretrained_path': args.pretrained_path}
     config = SimpleNamespace(**config)
 
     model = MultitaskBERT(config)
