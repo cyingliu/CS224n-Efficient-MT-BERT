@@ -368,7 +368,7 @@ if __name__ == "__main__":
         check_weights(df)
         print(df.head())
         for i in range(len(df)):
-            name = df.iloc[0]['name']
+            name = df.iloc[i]['name']
             output_dir = os.path.join(args.result_dir, name)
             
             saved = torch.load(os.path.join(output_dir, 'best-avg-multi-task-classifier.pt'), map_location=device)
