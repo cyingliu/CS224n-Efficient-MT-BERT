@@ -369,8 +369,8 @@ if __name__ == "__main__":
         print(df.head())
         for i in range(len(df)):
             name = df.iloc[i]['name']
-            path = df.iloc[i]['path']
-            model_dir = os.path.join(args.result_dir, path)
+            path = df.iloc[i]['model']
+            model_dir = os.path.join(args.result_dir, name, path)
             
             saved = torch.load(model_dir, map_location=device)
             config = saved['model_config']
