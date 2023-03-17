@@ -568,13 +568,16 @@ def train_multitask(args):
         
         if sst_dev_acc > sst_best_dev_acc:
             sst_best_dev_acc = sst_dev_acc
-            # save_model(model, optimizer, args, config, os.path.join(args.output_dir, 'best-sst-multi-task-classifier.pt'))
+            if args.sample == 'sentiment':
+                save_model(model, optimizer, args, config, os.path.join(args.output_dir, 'best-sst-multi-task-classifier.pt'))
         if para_dev_acc > para_best_dev_acc:
             para_best_dev_acc = para_dev_acc
-            # save_model(model, optimizer, args, config, os.path.join(args.output_dir, 'best-para-multi-task-classifier.pt'))
+            if args.sample == 'paraphrase':
+                save_model(model, optimizer, args, config, os.path.join(args.output_dir, 'best-para-multi-task-classifier.pt'))
         if sts_dev_acc > sts_best_dev_acc:
             sts_best_dev_acc = sts_dev_acc
-            # save_model(model, optimizer, args, config, os.path.join(args.output_dir, 'best-sts-multi-task-classifier.pt'))
+            if args.sample == 'semantic':
+                save_model(model, optimizer, args, config, os.path.join(args.output_dir, 'best-sts-multi-task-classifier.pt'))
         if avg_dev_acc > avg_best_dev_acc:
             avg_best_dev_acc = avg_dev_acc
             save_model(model, optimizer, scheduler, args, config, os.path.join(args.output_dir, 'best-avg-multi-task-classifier.pt'), epoch, sst_best_dev_acc, para_best_dev_acc, sts_best_dev_acc, avg_best_dev_acc)
