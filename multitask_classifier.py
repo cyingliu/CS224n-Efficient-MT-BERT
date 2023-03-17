@@ -458,6 +458,7 @@ def train_multitask(args):
         model.train()
         
         for _ in tqdm(range(steps_per_epoch), desc=f'train-{epoch}', disable=TQDM_DISABLE):
+            
             if args.sample == 'rr' or args.pcgrad:
                 task_id = (task_id + 1) % 3
             elif args.sample == "proportional":
@@ -472,6 +473,12 @@ def train_multitask(args):
                 tot = np.sum(aprobs)
                 probs = aprobs / tot
                 task_id = np.random.choice(3, p=probs)
+            elif args.sample == 'sentiment':
+                task_id = 0
+            elif args.sample == 'paraphrase':
+                task_id = 1
+            elif args.sample == 'semantic':
+                task_id = 2
             else:
                 raise ValueError(f"Invalid sample method: {args.sample}")
             
@@ -652,7 +659,7 @@ def get_args():
     parser.add_argument("--log_interval", type=int, help="interval for log writer", default=100)
     # multi-task
     parser.add_argument("--pcgrad", action='store_true', help='update three tasks loss with gradient surgery at a time')
-    parser.add_argument("--sample", help='sample method for multi dataset', type=str, choices=('rr', 'proportional', 'squareroot', 'anneal'), default='rr')
+    parser.add_argument("--sample", help='sample method for multi dataset', type=str, choices=('rr', 'proportional', 'squareroot', 'anneal', 'sentiment', 'paraphrase', 'semantic'), default='rr')
     parser.add_argument("--weight_sst", help='weight for sst loss', type=float, default=1.0)
     parser.add_argument("--weight_para", help='weight for para loss', type=float, default=1.0)
     parser.add_argument("--weight_sts", help='weight for sts loss', type=float, default=1.0)
