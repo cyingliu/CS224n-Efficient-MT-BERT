@@ -219,7 +219,7 @@ def model_eval_multitask(sentiment_dataloader,
             b_ids = b_ids.to(device)
             b_mask = b_mask.to(device)
 
-            ensembled_logits = np.zeros((args.batch_size, 5))
+            ensembled_logits = np.zeros((b_ids.shape[0], 5))
             for i, model in enumerate(models):
                 logits = model.predict_sentiment(b_ids, b_mask)
                 ensembled_logits += df.iloc[i]['sentiment'] * (logits.softmax(dim=1).cpu().numpy())
@@ -268,7 +268,7 @@ def model_eval_test_multitask(sentiment_dataloader,
 
             
 
-            y_hat = np.zeros(b_labels.flatten().shape)
+            y_hat = np.zeros(b_ids1.shape[0])
             
             for i, model in enumerate(models):
                 logits = model.predict_paraphrase(b_ids1, b_mask1, b_ids2, b_mask2)
@@ -298,7 +298,7 @@ def model_eval_test_multitask(sentiment_dataloader,
             b_mask2 = b_mask2.to(device)
 
 
-            y_hat = np.zeros(args.batch_size)
+            y_hat = np.zeros(b_ids1.shape[0])
             for i, model in enumerate(models):
                 logits = model.predict_similarity(b_ids1, b_mask1, b_ids2, b_mask2)
                 y_hat += df.iloc[i]['semantic'] * (logits.flatten().cpu().numpy())
@@ -318,7 +318,7 @@ def model_eval_test_multitask(sentiment_dataloader,
             b_mask = b_mask.to(device)
 
             
-            ensembled_logits = np.zeros((args.batch_size, 5))
+            ensembled_logits = np.zeros((b_ids.shape[0], 5))
             for i, model in enumerate(models):
                 logits = model.predict_sentiment(b_ids, b_mask)
                 ensembled_logits += df.iloc[i]['sentiment'] * (logits.softmax(dim=1).cpu().numpy())
