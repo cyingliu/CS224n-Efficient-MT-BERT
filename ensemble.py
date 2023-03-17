@@ -375,7 +375,7 @@ if __name__ == "__main__":
             saved = torch.load(model_dir, map_location=device)
             config = saved['model_config']
             if config.config_path:
-                config.config_path = os.path.join(result_dir, name, 'model_config.json')
+                config.config_path = os.path.join(args.result_dir, name, 'model_config.json')
             config = fix_config(config)
 
             model = MultitaskBERT(config)
