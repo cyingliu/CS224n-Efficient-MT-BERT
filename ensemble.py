@@ -369,18 +369,18 @@ if __name__ == "__main__":
         print(df.head())
         for i in range(len(df)):
             name = df.iloc[i]['name']
-            output_dir = os.path.join(args.result_dir, name)
+            model_dir = os.path.join(args.result_dir, name)
             
-            saved = torch.load(os.path.join(output_dir, 'best-avg-multi-task-classifier.pt'), map_location=device)
+            saved = torch.load(model_dir, map_location=device)
             config = saved['model_config']
             if config.config_path:
-                config.config_path = os.path.join(args.result_dir, name, 'model_config.json')
+                config.config_path = os.path.join(model_dir, 'model_config.json')
             config = fix_config(config)
 
             model = MultitaskBERT(config)
             model.load_state_dict(saved['model'])
             model = model.to(device)
-            print(f"Loaded model to test from {os.path.join(output_dir, 'best-avg-multi-task-classifier.pt')}")
+            print(f"Loaded model to test from {model_dir}")
             models.append(model)
 
         test_model_multitask(args, models, device, df)
