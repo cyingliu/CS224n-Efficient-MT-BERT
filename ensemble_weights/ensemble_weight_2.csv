@@ -1,0 +1,4 @@
+name	model	sentiment	paraphrase	semantic
+prefix_finetune_15_sentbert_alldata	best-avg-multi-task-classifier.pt	0.334	0.334	0.334
+fintune_mult_sentcls_mean_add-abs_sick	best-avg-multi-task-classifier.pt	0.333	0.333	0.333
+PAL_sentbert_alldata	best-avg-multi-task-classifier.pt	0.333	0.333	0.333
