@@ -134,6 +134,7 @@ def test_model_multitask(args, models, device, df):
             for p, s in zip(test_sts_sent_ids, test_sts_y_pred):
                 f.write(f"{p} , {s} \n")
 
+
 # Perform model evaluation in terms by averaging accuracies across tasks.
 def model_eval_multitask(sentiment_dataloader,
                          paraphrase_dataloader,
@@ -164,7 +165,6 @@ def model_eval_multitask(sentiment_dataloader,
             
             for i, model in enumerate(models):
                 logits = model.predict_paraphrase(b_ids1, b_mask1, b_ids2, b_mask2)
-                old_y_hat = logits.sigmoid().round().flatten().cpu().numpy()
                 y_hat += df.iloc[i]['paraphrase'] * (logits.sigmoid().flatten().cpu().numpy())
             
             y_hat = y_hat.round()
@@ -223,7 +223,6 @@ def model_eval_multitask(sentiment_dataloader,
             for i, model in enumerate(models):
                 logits = model.predict_sentiment(b_ids, b_mask)
                 ensembled_logits += df.iloc[i]['sentiment'] * (logits.softmax(dim=1).cpu().numpy())
-                old_y_hat = logits.argmax(dim=-1).flatten().cpu().numpy()
             
             y_hat = ensembled_logits.argmax(axis=-1).flatten()
             b_labels = b_labels.flatten().cpu().numpy()
@@ -241,6 +240,98 @@ def model_eval_multitask(sentiment_dataloader,
         return (paraphrase_accuracy, para_y_pred, para_sent_ids,
                 sentiment_accuracy,sst_y_pred, sst_sent_ids,
                 sts_corr, sts_y_pred, sts_sent_ids)
+
+# Perform model evaluation in terms by averaging accuracies across tasks.
+def model_eval_test_multitask(sentiment_dataloader,
+                         paraphrase_dataloader,
+                         sts_dataloader,
+                         models, device, df):
+    for model in models:
+        model.eval()  # switch to eval model, will turn off randomness like dropout
+
+    with torch.no_grad():
+
+        para_y_pred = []
+        para_sent_ids = []
+        # Evaluate paraphrase detection.
+        for step, batch in enumerate(tqdm(paraphrase_dataloader, desc=f'eval', disable=TQDM_DISABLE)):
+            (b_ids1, b_mask1,
+             b_ids2, b_mask2,
+             b_sent_ids) = (batch['token_ids_1'], batch['attention_mask_1'],
+                          batch['token_ids_2'], batch['attention_mask_2'],
+                          batch['sent_ids'])
+
+            b_ids1 = b_ids1.to(device)
+            b_mask1 = b_mask1.to(device)
+            b_ids2 = b_ids2.to(device)
+            b_mask2 = b_mask2.to(device)
+
+            
+
+            y_hat = np.zeros(b_labels.flatten().shape)
+            
+            for i, model in enumerate(models):
+                logits = model.predict_paraphrase(b_ids1, b_mask1, b_ids2, b_mask2)
+                y_hat += df.iloc[i]['paraphrase'] * (logits.sigmoid().flatten().cpu().numpy())
+            
+            y_hat = y_hat.round()
+
+            para_y_pred.extend(y_hat)
+            para_sent_ids.extend(b_sent_ids)
+
+
+        sts_y_pred = []
+        sts_sent_ids = []
+
+
+        # Evaluate semantic textual similarity.
+        for step, batch in enumerate(tqdm(sts_dataloader, desc=f'eval', disable=TQDM_DISABLE)):
+            (b_ids1, b_mask1,
+             b_ids2, b_mask2,
+             b_sent_ids) = (batch['token_ids_1'], batch['attention_mask_1'],
+                          batch['token_ids_2'], batch['attention_mask_2'],
+                          batch['sent_ids'])
+
+            b_ids1 = b_ids1.to(device)
+            b_mask1 = b_mask1.to(device)
+            b_ids2 = b_ids2.to(device)
+            b_mask2 = b_mask2.to(device)
+
+
+            y_hat = np.zeros(args.batch_size)
+            for i, model in enumerate(models):
+                logits = model.predict_similarity(b_ids1, b_mask1, b_ids2, b_mask2)
+                y_hat += df.iloc[i]['semantic'] * (logits.flatten().cpu().numpy())
+
+            sts_y_pred.extend(y_hat)
+            sts_sent_ids.extend(b_sent_ids)
+
+
+        sst_y_pred = []
+        sst_sent_ids = []
+
+        # Evaluate sentiment classification.
+        for step, batch in enumerate(tqdm(sentiment_dataloader, desc=f'eval', disable=TQDM_DISABLE)):
+            b_ids, b_mask, b_sent_ids = batch['token_ids'], batch['attention_mask'],  batch['sent_ids']
+
+            b_ids = b_ids.to(device)
+            b_mask = b_mask.to(device)
+
+            
+            ensembled_logits = np.zeros((args.batch_size, 5))
+            for i, model in enumerate(models):
+                logits = model.predict_sentiment(b_ids, b_mask)
+                ensembled_logits += df.iloc[i]['sentiment'] * (logits.softmax(dim=1).cpu().numpy())
+                
+            y_hat = ensembled_logits.argmax(axis=-1).flatten()
+
+            sst_y_pred.extend(y_hat)
+            sst_sent_ids.extend(b_sent_ids)
+
+        return (para_y_pred, para_sent_ids,
+                sst_y_pred, sst_sent_ids,
+                sts_y_pred, sts_sent_ids)
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
