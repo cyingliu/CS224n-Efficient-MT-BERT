@@ -1,3 +1,3 @@
-name	sentiment	paraphrase	semantic
-finetune_sentbert_sentiment_sst/best-sst-multi-task-classifier.pt	1.0	0.0	0.0
-prefix_15_sentbert_paraphrase/best-para-multi-task-classifier.pt	0.0	1.0	1.0
+name	path	sentiment	paraphrase	semantic
+finetune_sentbert_sentiment_sst	finetune_sentbert_sentiment_sst/best-sst-multi-task-classifier.pt	1.0	0.0	0.0
+finetune_sentbert_sentiment_sst	prefix_15_sentbert_paraphrase/best-para-multi-task-classifier.pt	0.0	1.0	1.0

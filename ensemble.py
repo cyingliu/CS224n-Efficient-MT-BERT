@@ -363,18 +363,19 @@ if __name__ == "__main__":
 
     df = pd.read_csv(args.model_list, delimiter='\t')
     models = []
-    if len(df.columns) > 1:
+    if len(df.columns) > 2:
         print("Use determined weights")
         check_weights(df)
         print(df.head())
         for i in range(len(df)):
             name = df.iloc[i]['name']
-            model_dir = os.path.join(args.result_dir, name)
+            path = df.iloc[i]['path']
+            model_dir = os.path.join(args.result_dir, path)
             
             saved = torch.load(model_dir, map_location=device)
             config = saved['model_config']
             if config.config_path:
-                config.config_path = os.path.join(model_dir, 'model_config.json')
+                config.config_path = os.path.join(result_dir, name, 'model_config.json')
             config = fix_config(config)
 
             model = MultitaskBERT(config)
