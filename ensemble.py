@@ -44,7 +44,8 @@ def fix_config(config):
               'pooling_type': 'mean',
               'sentiment_pooling_type': 'mean',
               'classification_concat_type':'add-abs',
-              'pretrained_path': ""}
+              'pretrained_path': "",
+              'paraphrase_classifier_type': 'linear'}
 
     for k in default_config:
         if k not in vars(config):

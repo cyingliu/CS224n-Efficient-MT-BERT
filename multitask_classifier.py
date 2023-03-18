@@ -123,6 +123,7 @@ class MultitaskBERT(nn.Module):
         
         self.concat_pair = config.concat_pair
         self.similarity_classifier_type = config.similarity_classifier_type
+        self.paraphrase_classifier_type = config.paraphrase_classifier_type
         self.pooling_type = config.pooling_type
         self.sentiment_pooling_type = config.sentiment_pooling_type
         self.classification_concat_type = config.classification_concat_type
@@ -141,7 +142,11 @@ class MultitaskBERT(nn.Module):
         
         if config.downstream == 'single':
             self.sentiment_classifier = nn.Linear(config.hidden_size, config.num_labels) 
-            self.paraphrase_classifier = nn.Linear(config.hidden_size * n, 1)
+            if config.paraphrase_classifier_type == 'linear':
+                self.paraphrase_classifier = nn.Linear(config.hidden_size * n, 1)
+            else: # cosine-similarity
+                self.paraphrase_classifier = nn.CosineSimilarity(dim=1, eps=1e-08)
+
             if config.similarity_classifier_type == 'linear':
                 self.similarity_classifier = nn.Linear(config.hidden_size * n, 1)
             else: # 'cosine-similarity'
@@ -154,11 +159,14 @@ class MultitaskBERT(nn.Module):
                 nn.ReLU(),
                 nn.Linear(config.hidden_size, config.num_labels)
             )
-            self.paraphrase_classifier = nn.Sequential(
-                nn.Linear(config.hidden_size * n, config.hidden_size),
-                nn.ReLU(),
-                nn.Linear(config.hidden_size, 1)
-            )
+            if config.paraphrase_classifier_type == 'linear':
+                self.paraphrase_classifier = nn.Sequential(
+                    nn.Linear(config.hidden_size * n, config.hidden_size),
+                    nn.ReLU(),
+                    nn.Linear(config.hidden_size, 1)
+                )
+            else:
+                self.paraphrase_classifier = nn.CosineSimilarity(dim=1, eps=1e-08)
             if config.similarity_classifier_type == 'linear':
                 self.similarity_classifier = nn.Sequential(
                     nn.Linear(config.hidden_size * n, config.hidden_size),
@@ -220,10 +228,11 @@ class MultitaskBERT(nn.Module):
         during evaluation, and handled as a logit by the appropriate loss function.
         '''
         ### TODO
-        if self.concat_pair:
+        if self.concat_pair: # self.paraphrase_classfier_type = 'linear'
             sequence_output, pooled_output = self.forward(input_ids_1, attention_mask_1, task_id=1)
             pooled_output = self.pooling(self.pooling_type, sequence_output, pooled_output)
             pooled_output = self.dropout(pooled_output)
+            logits = self.paraphrase_classifier(pooled_output)
         
         else:
             sequence_output_1, pooled_output_1 = self.forward(input_ids_1, attention_mask_1, task_id=1)
@@ -232,9 +241,12 @@ class MultitaskBERT(nn.Module):
             pooled_output_2 = self.pooling(self.pooling_type, sequence_output_2, pooled_output_2)
             pooled_output_1 = self.dropout(pooled_output_1)
             pooled_output_2 = self.dropout(pooled_output_2)
-            pooled_output = self.concat_pooled_outputs(pooled_output_1, pooled_output_2)
-        
-        logits = self.paraphrase_classifier(pooled_output)
+
+            if self.paraphrase_classifier_type == 'linear':
+                pooled_output = self.concat_pooled_outputs(pooled_output_1, pooled_output_2)
+                logits = self.paraphrase_classifier(pooled_output)
+            else:
+                logits = self.paraphrase_classifier(pooled_output_1, pooled_output_2)
         
         return logits
 
@@ -357,7 +369,8 @@ def train_multitask(args):
               'pooling_type': args.pooling_type,
               'sentiment_pooling_type': args.sentiment_pooling_type,
               'classification_concat_type': args.classification_concat_type,
-              'pretrained_path': args.pretrained_path}
+              'pretrained_path': args.pretrained_path,
+              'paraphrase_classifier_type': args.paraphrase_classifier_type}
 
     config = SimpleNamespace(**config)
 
@@ -670,6 +683,7 @@ def get_args():
     parser.add_argument("--downstream", help="single/double linear downstream classifiers", type=str, choices=('single', 'double'), default='single')
     parser.add_argument("--config_path", help='config (.json) file for adaptation modules', type=str, default="")
     parser.add_argument("--similarity_classifier_type", help='linear/cosine similarity', type=str, choices=('linear', 'cosine-similarity'), default='cosine-simlarity')
+    parser.add_argument("--paraphrase_classifier_type", help='linear/cosine similarity', type=str, choices=('linear', 'cosine-similarity'), default='linear')
     parser.add_argument("--sentiment_pooling_type", help='pooling method for bert embedding, for sentiment class, overide --pooling_type', choices=('cls', 'mean', 'max'), default='mean')
     parser.add_argument("--pooling_type", help='pooling method for bert embeddings', type=str, choices=('cls', 'mean', 'max'), default='mean')
     parser.add_argument("--classification_concat_type", help='concatenaton method for pooled outputs', type=str, choices=('naive', 'add-abs'), default='add-abs') # 'naive': (u, v), 'add-abs': (u, v, |u-v|)
