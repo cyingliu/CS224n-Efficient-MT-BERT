@@ -36,9 +36,10 @@ python multitask_classifier.py --option [finetune/pretrain] --use_gpu\
     --sample [rr, squareroot, anneal]\
     --config_path CONFIG_PATH --downstream [single, double]\
     --similarity_classifier_type ['linear', 'cosine-similarity']\
+    --paraphrase_classifier_type ['linear', 'cosine-similarity']\
     --sentiment_pooling_type ['cls', 'mean', 'max']\
     --pooling_type ['cls', 'mean', 'max']\
-    --classification_concat_type ['naive', 'add-abs']
+    --classification_concat_type ['naive', 'add-abs']\
     --reload_checkpoint_path CHECKPOINT_PATH\
     --pretrained_path PRETRAINED_PATH\
     --second_stage_path FINETUNED_PATH
