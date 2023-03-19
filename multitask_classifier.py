@@ -530,7 +530,11 @@ def train_multitask(args):
             else:
                 # gradient accumulation 
                 loss /= args.gradient_accumulation_step
-                loss.backward()
+                if args.option == 'pretrain' and ((task_id == 2 and args.similarity_classifier_type == 'cosine-similarity') or (task_id == 1 and args.paraphrase_classifier_type == 'cosine-similarity')):
+                    # no grad_fn (cancel this function after adding linear layer before cosine-similarity)
+                    pass
+                else:
+                    loss.backward()
 
             train_loss[task_id] += loss.item()
             num_batches[task_id] += 1
