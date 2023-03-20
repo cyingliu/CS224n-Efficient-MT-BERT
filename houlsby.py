@@ -21,5 +21,5 @@ class Houlsby(nn.Module):
         output = self.down_project(hidden_states)
         output = self.act_fn(output)
         output = self.up_project(output)
-
+        output = hidden_states + output # add residual!
         return output
