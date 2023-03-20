@@ -1,0 +1,13 @@
+{
+	"num_tasks": 3,
+	"houlsby": true,
+	"houlsby_size": [256, 256, 256],
+	"houlsby_add_layernorm": true,
+  	"pal": true,
+	"pal_share": true,
+	"pal_hidden_size": [204, 204, 204],
+	"pal_attn_head": 12,
+  	"prefix": true,
+	"prefix_length": [15, 15, 15],
+	"prefix_init": true
+}

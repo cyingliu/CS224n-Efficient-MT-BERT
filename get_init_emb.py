@@ -38,7 +38,8 @@ if __name__ == "__main__":
               'pooling_type': args.pooling_type,
               'sentiment_pooling_type': args.sentiment_pooling_type,
               'classification_concat_type': args.classification_concat_type,
-              'pretrained_path': args.pretrained_path}
+              'pretrained_path': args.pretrained_path,
+              'paraphrase_classifier_type': args.paraphrase_classifier_type}
     config = SimpleNamespace(**config)
 
     model = MultitaskBERT(config)
