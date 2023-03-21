@@ -37,6 +37,7 @@ if __name__ == "__main__":
     parser.add_argument('--train_data_path', default='./data/sst-quora-sts-pretrain-train.csv')
     parser.add_argument('--test_data_path', default='./data/sst-quora-sts-pretrain-test.csv') 
     parser.add_argument('--output_dir', required=True)
+    parser.add_argument('--num_epoch', type=int, default=3)
     args = parser.parse_args()
 
     model = BertForMaskedLM.from_pretrained('bert-base-uncased')
@@ -74,6 +75,7 @@ if __name__ == "__main__":
         fp16=True,
         logging_steps=logging_steps,
         save_strategy='epoch', #
+        num_train_epochs=args.num_epoch, #
     )
     trainer = Trainer(
         model=model,
