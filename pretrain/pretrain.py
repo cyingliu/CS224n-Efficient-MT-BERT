@@ -73,7 +73,7 @@ if __name__ == "__main__":
         push_to_hub=False,
         fp16=True,
         logging_steps=logging_steps,
-        save_steps=1000, #
+        save_strategy='epoch', #
     )
     trainer = Trainer(
         model=model,

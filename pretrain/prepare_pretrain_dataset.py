@@ -38,12 +38,13 @@ def write_to_file(sents, output_path):
 	print(f"Data size: {len(sents)}")
 
 if __name__ == "__main__":
-	output_path = 'data/sst-quora-sts-pretrain-test.csv'
-	sst_file_path = '../data/ids-sst-dev.csv'
+	output_path = 'data/quora-sts-pretrain-test.csv'
+	# sst_file_path = '../data/ids-sst-dev.csv'
+	# sst_rotten_file_path = '../data/ids-sst-rotten15k-train.csv'
 	quora_file_path = '../data/quora-dev.csv'
 	sts_file_path = '../data/sts-dev.csv'
 	sents = []
-	sents.extend(prepare_sst_texts(sst_file_path))
+	# sents.extend(prepare_sst_texts(sst_rotten_file_path))
 	sents.extend(prepare_sentence_pair_texts(quora_file_path))
 	sents.extend(prepare_sentence_pair_texts(sts_file_path))
 	# do shuffling after constructing dataset, so that the same chunk mostly contains close sentences
