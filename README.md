@@ -58,6 +58,10 @@ Finetune | Sentence-BERT | Prefix | 112.1 | 50.5 | 81.9 | **77.5** | **70.0**
 Finetune | Sentence-BERT | Adapter | 119.7 | 50.5 | 79.3 | 72.7 | 67.5
 Ensemble x3 ||| **53.2** | **83.5** | **78.5** | **71.1**
 
+## Poster
+
+![poster](CS224n_Default_Final_Project_Poster.png)
+
 ### Acknowledgement
 
 The BERT implementation part of the project was adapted from the "minbert" assignment developed at Carnegie Mellon University's [CS11-711 Advanced NLP](http://phontron.com/class/anlp2021/index.html),
