@@ -7,7 +7,6 @@ Please refer to the [report](CS_224N_Final_Report.pdf) for further details.
 
 * Follow `setup.sh` to properly setup a conda environment and install dependencies.
 * There is a detailed description of the code structure in [STRUCTURE.md](./STRUCTURE.md), including a description of which parts you will need to implement.
-* You are only allowed to use libraries that are installed by `setup.sh`, external libraries that give you other pre-trained models or embeddings are
 
 ## Usage
 
